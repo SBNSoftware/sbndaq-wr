@@ -1,0 +1,70 @@
+#!/bin/bash
+###########################################
+# 
+# Ease the way to load and list WR kernel modules.
+#
+# Copyright (c) 2012, Benoit RAT
+# Authors: Benoit RAT <benoit(AT)sevensols.com.
+# Licence: GPL v2 or later.
+# Website: http://www.sevensols.com
+#
+###########################################
+
+
+## Array of kernel modules
+modArray[0]="rawrabbit"
+modArray[1]="spec"
+modArray[2]="wr_nic"
+modArray[3]="spec-wr-nic"
+modArray[4]="spec-fine-delay"
+modArray[5]="fmc-write-eeprom"
+modArray[6]="fmc-trivial"
+modArray[7]="fmc"
+
+
+help ()
+{
+cat << EOF
+Usage: $(basename $0) <Options>
+Options:
+	-l|--list) list modules
+	-r|--remove) remove modules
+
+EOF
+exit 0
+}
+
+
+
+list()
+{
+        lspci | grep CERN
+	for mod in "${modArray[@]}"; do
+		lsmod | grep ${mod}
+	done
+}
+
+remove()
+{
+	for mod in "${modArray[@]}"; do
+		lsmod | grep ${mod} &> /dev/null
+		if [ "x$?" = "x0" ]; then
+			echo "Removing ${mod}"
+			sudo rmmod ${mod}
+		fi
+	done
+}
+
+while [ $# -gt 0 ]; do
+	# Until you run out of parameters . . .
+	case "$1" in
+		-h|--help) help;;
+		-r|--remove) remove; exit $?;;
+		-l|--list) list; exit $?;;
+		*) echo "Unknown arg $1"; help;;
+	esac
+	shift 	# Check next set of parameters.
+done
+
+help
+

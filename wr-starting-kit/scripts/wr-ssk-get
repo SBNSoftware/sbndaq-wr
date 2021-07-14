@@ -1,0 +1,311 @@
+#!/bin/bash
+## Script to ease the installation of gateware HDL when using 
+## the starting kit
+##
+## Authors: 
+##	- Benoit Rat (Seven Solutions, www.sevensols.com)
+##
+## GNU Lesser General Public License Usage
+## This file may be used under the terms of the GNU Lesser
+## General Public License version 2.1 as published by the Free Software
+## Foundation and appearing in the file LICENSE.LGPL included in the
+## packaging of this file.  Please review the following information to
+## ensure the GNU Lesser General Public License version 2.1 requirements
+## will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+#######################################################################################################
+
+
+### Script to return text according to previous return
+wr_echoret()
+{
+	if [ $1 = "0" ]; then
+		echo "$2"
+	else
+		echo "$3"
+	fi
+}
+
+### Fetching a file
+fetchfile()
+{
+	url=$1
+	file=$(basename $url)
+	output=${DOWNLOADDIR}/${file}
+	md5=$2
+	name=$3
+
+	if [ ! -d ${DOWNLOADDIR} ]; then
+		mkdir -p ${DOWNLOADDIR}
+	fi 
+
+	## If output already exist check md5 or override it
+	if [ -f ${output} ]; then
+		ourmd5=$(cat $output | md5sum | sed 's/ .*$//')
+		if [ "$ourmd5" = "$md5" ]; then
+		    echo "File already exist with valid md5, Skiping download of $file"
+		    return 0
+		else
+		    echo "File $file is corrupted, re-downloading"
+		    rm $output
+		fi
+	fi
+
+	## Download from upstream
+	wget -nv $url -O $output
+	echo "wget -nv $url -O $ouput"
+	if [ -s $output ]; then
+		echo "Retrieved $filee from upstream"
+		return 0
+	else
+		rm -f $output
+		echo "Cannot download $name"
+		return 1
+	fi
+}
+
+
+linkedfiles()
+{
+	echo "Linking HDL binaries"
+	# Loop on the fake download infor file....
+	echo $fakedlinfo | while read url md5; do
+		lname=$(echo $url | sed -E 's/.*\/(.*).bin-.*/\1.bin/')
+		if [ -s $hfile ]; then
+			ln -fs ${hname} ${lname} 
+			echo "Linking $hname to $lname" 
+		else
+			echo "File ${hname} was not found"
+		fi
+	done
+	echo "DONE"
+
+}
+
+
+### Fetching the desired HDL binaries
+fetch() 
+{
+	url=$(echo ${PKGURL} | cut -d" " -f1)
+	md5=$(echo ${PKGURL} | cut -d" " -f2)
+
+
+	echo "Fetching HDL binaries"
+	fetchfile  ${url} ${md5}
+	echo "Extracting ..."
+	cd ${DOWNLOADDIR}; 
+	file=$(basename ${url})
+	tar xzvf $file $(tar tf $file | grep .bin)
+
+}
+
+### Install firmware in /lib/firmware/fmc
+insthdl()
+{
+	echo "Installing firware in /lib/firmware/fmc"
+	installdir=/lib/firmware/fmc
+	if [ ! -d ${installdir} ]; then
+		sudo mkdir -p ${installdir}
+	fi	
+	sudo cp -v ${DOWNLOADDIR}/spec-init.bin ${DOWNLOADDIR}/wr_nic_dio.bin  ${installdir}
+	wr_echoret $? "OK" "ERROR"
+	
+	checkdrv;
+	removemod;
+}
+
+
+checkdrv()
+{
+	echo ""
+	echo "Checking the drivers"
+
+	for mod in "fmc" "spec" "wr-nic"; do 
+		if [ -s /lib/modules/$(uname -r)/extra/${mod}.ko ]; then
+			echo "${mod}.ko found!"
+		else
+			echo "${mod}.ko was not found in /lib/modules/$(uname -r)/extra/"
+			echo "first checkout the spec-sw project and run: make && sudo make install"
+			return 1
+		fi
+	done
+
+	if (lsb_release -a  2>&1 | grep Ubuntu &> /dev/null); then
+		echo "Forcing depmod.d/ubuntu.conf to look into extra folder";
+		cat /etc/depmod.d/ubuntu.conf | grep extra &> /dev/null
+		if [ "x$?" != "x0" ]; then
+			echo "Adding extra to depmod.conf search path in order to force looking at our installed modules"
+			sudo sed 's/built-in/extra built-in/g' -i /etc/depmod.d/ubuntu.conf
+		fi
+	fi
+
+	echo "Creating dependancies... (This can take some time)"
+	echo "sudo depmod -a"
+	sudo depmod -a
+}
+
+
+weeprom()
+{
+	##Compile the fru generator lib
+	if ! (test -f ${scriptdir}/../spec-sw/fmc-bus/tools/libipmi/libipmi.so); then
+		make -C ${scriptdir}/../spec-sw/fmc-bus/tools/libipmi/
+	fi
+	i=0
+	cd /sys/bus/fmc/devices/
+	echo "Found" $(ls | grep fmc- | wc -w) "FMC board(s) with empty EEPROM"
+	for fmc in $(ls | grep fmc-); do
+		i=$(($i + 1))
+		sn=$(eval echo "\${${i}}")
+		##echo "#$i: fmc=$fmc S/N=$sn"
+
+		##Ask user about the SN
+		while [ "x"$(echo $sn | grep "^\([0-9]\{1,2\}-\)\?[0-9]\{1,3\}$") = "x" ]; do
+			read -p "Enter S/N for board ${fmc} in the format xx-XXX (or 0) : " sn
+		done
+
+		## Parse it
+		if (echo ${sn} | grep "-" > /dev/null); then
+			sn=$(echo ${sn} | awk -F"-" '{ print "7S-DIO-v2-S" $1 "-" $2 }')
+		else
+			sn=$(printf "7S-DIO-v2-S00-%03d" ${sn})
+		fi
+
+		echo "Writing eeprom with S/N: ${sn} ..."
+
+		## Write EEPROM file
+		${scriptdir}/../spec-sw/fmc-bus/tools/fru-generator \
+			-v "CERN" -n "FmcDio5cha" -p "EDA-02408-V2-0" -s ${sn} > /tmp/fmc-dio-eeprom.bin
+
+		## Write to device
+		cat /tmp/fmc-dio-eeprom.bin > /sys/bus/fmc/devices/${fmc}/eeprom
+		if [ $? -eq 0 ]; then echo "Done"; fi
+
+
+	done
+}
+
+removemod()
+{
+	for mod in "wr-nic" "spec" "fmc"; do
+		if ( lsmod | grep ${mod} > /dev/null ); then
+			echo "Removing ${mod} kernel module..."
+			sudo rmmod ${mod}
+		fi
+	done
+}
+
+### Load module 
+loadmodule()
+{
+	echo "loading modules & gatewares..."
+	echo "sudo modprobe wr-nic"
+	sudo modprobe wr-nic 
+}
+
+### Insert module (should not be necesarry modprob should work)
+insertmodule()
+{
+	echo "inserting modules & gatewares..."
+	for mod in "fmc" "spec" "wr-nic"; do
+		printf "sudo insmod /lib/modules/$(uname -r)/extra/${mod}.ko ...\t"
+		sudo insmod /lib/modules/$(uname -r)/extra/${mod}.ko 
+		wr_echoret $? "OK" "ERROR"
+	done
+	exit 0
+}
+
+
+reportlog()
+{
+	olog="$(pwd)/report.log"
+	genreport 2>&1 | tee ${olog}
+	echo "Report generated in file ${olog}"
+}
+
+genreport()
+{
+	cd ${scriptdir}/..
+	date
+	uname -n -r
+	lsb_release -d
+	pwd 
+	gengitreport
+
+
+	make -C ${scriptdir}/.. clean
+	make -C ${scriptdir}/.. update
+	make -C ${scriptdir}/..
+	echo "Now performing installation..."
+	read -p "This step require sudo! Continue? [y/N]: " ret 
+	if [ "x$ret" = "xy" ]; then
+		sudo make -C ${scriptdir}/.. install
+	else
+		echo "WARNING: Installation skipped"
+	fi
+
+	cat /sys/module/fmc/*version
+	for fmcmod in $(find  /lib/modules/$(uname -r) -name fmc.ko); do
+		echo ${fmcmod}
+		strings ${fmcmod} | grep version=
+	done
+
+}
+
+gengitreport()
+{
+	git describe --always 
+	subs=$(git submodule foreach git describe --always --dirty="+" | grep Entering | sed  "s/Entering '\(.*\)'.*/\1/g")
+	for sub in $subs; do
+		echo "$sub/:";
+		cd $sub;
+		gengitreport
+	done
+
+	
+}
+
+
+### Show help of the function
+help () 
+{
+cat << EOF
+Usage: $(basename $0)  [Options] 
+	
+Options:	
+	-h|--help)     Show this little help
+	-a|--all)      Fetch and install
+	-f|--fetch)    Fetch files only
+	-i|--install)  Install the gateware for the driver (require sudo)
+	-l|--load)     Load modules in kernel (require sudo)
+	-w|--weeprom [sn1 [sn2] ...])   Write fmc eeprom with the given serial number for each slots
+	--insert)      Insert modules in kernel (require sudo)
+	--report)      Make everything and generate report.log
+EOF
+exit 0
+}
+
+#################################################
+### Main execution
+
+# setup script dir
+scriptdir=$(cd $(dirname $0); pwd)
+DOWNLOADDIR=${scriptdir}/../firmware
+PKGURL="http://www.ohwr.org/attachments/download/2744/wr-starting-kit-v2.0_gw.tar.gz 9e48bbe6c30b18864ecddceb7627e6e9"
+
+while [ $# -gt 0 ]; do    # Until you run out of parameters . . .
+	case "$1" in
+		-h|--help) help;;
+		-a|--all) fetch; insthdl instdrv; exit;;
+		-f|--fetch) fetch; exit;;
+		-i|--install) insthdl; exit;;
+		-l|--load) loadmodule; exit;;
+		-w|--weeprom) weeprom $2 $3 $4 $5 $6; exit;;
+		--insert) insertmodule; exit;;
+		--report) reportlog; exit;;
+		*) help;;
+	esac
+	shift       # Check next set of parameters.
+done
+
+
+help

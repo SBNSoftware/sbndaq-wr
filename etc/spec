@@ -1,0 +1,82 @@
+#!/bin/bash
+#
+# $Id: spec,v 1.0 2016/09/08 16:00:00 badgett Exp $
+# 
+# spec: Loads the White Rabbit FMC, SPEC and WR-NIC device drivers
+#
+# Version: @(#) /etc/init.d/spec 1.0
+#
+# chkconfig: 345 50 50
+# description: Loads the White Rabbit FMC, SPEC and WR-NIC device drivers
+#
+
+if [ -f /etc/init.d/functions ]
+then
+  . /etc/init.d/functions
+else
+  echo "ERROR ctri: could not find /etc/init.d/functions"
+  exit -1
+fi
+
+start()
+{
+  depmod
+  logger "SPEC Loading SPEC device driver"
+  modprobe spec
+
+  logger "SPEC Loading WR-NIC device driver"
+  modprobe wr-nic
+
+  logger "SPEC Bringing up WR0 interface"
+  ifconfig wr0 up
+
+  logger "SPEC Finished SPEC/WR-NIC init"
+}
+
+stop()
+{
+  logger "SPEC Unloading SPEC and WR-NIC device drivers"
+  ifconfig wr0 down
+
+  rmmod wr-nic
+  rmmod spec
+}
+
+restart()
+{
+  stop
+  sleep 1
+  start
+}
+
+reload()
+{
+  stop
+  sleep 1
+  start
+}
+
+status()
+{
+  lspci | grep "CERN\/ECP\/EDU"
+  ls /sys/bus/pci/drivers/spec
+  ifconfig wr0
+}
+
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart)
+        restart
+        ;;
+  reload)
+        reload
+        ;;
+  status)
+        status
+        ;;
+esac

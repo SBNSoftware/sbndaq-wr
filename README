@@ -1,0 +1,27 @@
+
+This project directory sbnddaq-readout/projects/wr/ encapsulates 
+and buils the Seven Solutions / CERN White Rabbit starting kit, 
+including the various device drivers and standard tools.
+
+To make and install the device drivers and software, type:
+
+setup gcc v7_3_0
+unsetup python
+make clean
+make
+ksu
+make install
+
+The latter requires ksudo access to the root account, as it installs 
+the actual device drivers.  After these steps are complete, the 
+drivers will be automatically reloaded after every reboot -- no need to 
+run modprobe.   The SPEC tools executables are also installed in /usr/bin 
+with the privilege bit set so they can be run from account other 
+than root.
+
+For status/enable/disable functions, use on of the three argumnents here:
+
+/sbin/service spec [status|start|stop]
+
+For your convenience, an RPM file is created during the make 
+process if you wish to use this configuration mechanism.

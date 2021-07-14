@@ -1,0 +1,68 @@
+#! /bin/bash
+
+# ----------------------------------------------------------------------------
+# This program opens uart to connect with spec card.
+# Version: 1.0
+# Author: Benoit RAT
+# 	  Miguel Jimenez Lopez
+#	  	
+# Note: look at the help() or use --help
+# ----------------------------------------------------------------------------
+
+help()
+{
+cat << EOF
+Usage: $(basename $0) <Options> [<#board>]
+#board is 1, 2, etc...
+Options:
+	-h|--help) show little help
+	-p|--physical) Use physical interface (Default)
+	-v|--virtual) Use virtual UART
+	-i|--inplace) does not open a new terminal (Only open the first one)
+EOF
+exit 0
+}
+
+
+while [ $# -gt 0 ]; do
+	# Until you run out of parameters . . .
+	case "$1" in
+		-h|--help) help;;
+		-p|--physical) phy=1;;
+		-v|--virtual) vir=1;;
+		-i|--inplace) inp=1;;
+		[1-9])	boardnum=$1;;	
+		*) echo "Unknown arg $1"; help;;
+	esac
+	shift 	# Check next set of parameters.
+done
+
+
+
+
+## Obtain the terminal to ask
+if [ "x$vir" = "x1" ]; then
+	res="$(lspci | grep CERN | cut -f1 -d: )"
+	cmd="sudo /WRProject/Repositorios/spec-sw/tools/spec-vuart -b "		
+else
+	res="$(ls /dev/ | grep ttyUSB )"
+	cmd="sudo minicom --baudrate=11520 --device=/dev/"
+fi
+
+##Select only one board with board num
+if [ -n $boardnum ]; then
+	res="$(echo "$res" | sed -n ${boardnum}p)"
+fi 
+
+
+##For loop
+for d in ${res}; do
+	sudo echo "Try to access $d (pci spec)" ; 
+	if [ "x$inp" = "x1" ]; then
+		${cmd}${d}
+		break;
+	else
+		sudo xterm -hold -e "${cmd}${d}" &
+	fi
+done
+
