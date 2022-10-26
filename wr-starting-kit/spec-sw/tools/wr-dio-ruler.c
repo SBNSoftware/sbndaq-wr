@@ -240,7 +240,7 @@ static int ruler_wait_event(int inch, struct timespec *ts)
 
 /* ...and run all actions when the event happens */
 static int ruler_run_actions(int nact, struct timespec *ts,
-			     struct ruler_action *actions)
+			     struct ruler_action *actions, int inch)
 {
 	int i;
 
@@ -269,6 +269,45 @@ static int ruler_run_actions(int nact, struct timespec *ts,
 			f.cmd.t[0].tv_nsec -= 1000 * 1000 * 1000;
 			f.cmd.t[0].tv_sec++;
 		}
+
+		/*printf(" f.cmd.channel %i = ", f.cmd.channel);*/
+
+                /*Adding info about input signal in IN<ch> in packet frame to distingush beam signals */ 
+                /*trying  two places in the packet */
+
+                /* testing */
+                /*CAN"T use the follwing locations
+                f.cmd.channel = 55;
+                f.cmd.command = 66;
+                f.cmd.flags   = 77;*/
+
+                /* but CAN use the following
+                f.cmd.nstamp  = 77;
+                 */
+                
+                /* first possible  location : WE USE THIS ONE */
+                if(inch == 1) f.cmd.value = 1;  /* $1D at MI-12;   $AE at MI-60 */
+                if(inch == 2) f.cmd.value = 2;
+                if(inch == 3) f.cmd.value = 3;
+                if(inch == 4) f.cmd.value = 4;  /* gatedBES at MI-12;  MIBS $74 at MI-60  */
+                /*printf(" f.cmd.value = %i ", f.cmd.value);*/
+
+                /* second possible location */
+                /*
+                if(inch == 1) f.cmd.nstamp = 1;
+                if(inch == 2) f.cmd.nstamp = 2;
+                if(inch == 3) f.cmd.nstamp = 3;
+                if(inch == 4) f.cmd.nstamp = 4;
+                */
+                /*printf(" f.cmd.nstamp = %i ", f.cmd.nstamp);*/
+
+                /* Lets' avoid using any of the f.cmd.t[N].tv_sec pr tv_nsec in case we need other timestamps */
+                /* so dont use 
+                if(inch == 1) f.cmd.t[2].tv_nsec = 1;
+                if(inch == 2) f.cmd.t[2].tv_nsec = 2;
+                if(inch == 3) f.cmd.t[2].tv_nsec = 3;
+                if(inch == 4) f.cmd.t[2].tv_nsec = 4;
+                */
 
 		if (actions[i].isremote) {
 			if (send(ruler_sock, &f, sizeof(f), 0) < 0) {
@@ -311,7 +350,9 @@ int main(int argc, char **argv)
 		exit(1);
 
 	inch = ruler_config_in(argv[2]);
-	if (inch < 0)
+	printf( " input channel = %i ", inch);
+
+        if (inch < 0)
 		exit(1);
 
 	actions = ruler_build_actions(argc - 3, argv + 3);
@@ -321,7 +362,7 @@ int main(int argc, char **argv)
 	while(1) {
 		if (ruler_wait_event(inch, &ts) < 0)
 			exit(1);
-		if (ruler_run_actions(argc - 3, &ts, actions) < 0)
+		if (ruler_run_actions(argc - 3, &ts, actions, inch) < 0)
 			exit(1);
 	}
 	exit(0);
