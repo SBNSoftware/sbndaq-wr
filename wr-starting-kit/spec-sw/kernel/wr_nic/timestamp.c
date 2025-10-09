@@ -12,8 +12,17 @@
 #include <linux/netdevice.h>
 #include <linux/sockios.h>
 #include <linux/net_tstamp.h>
+#include <linux/version.h>
 
 #include "wr-nic.h"
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+# define TIMESPEC          timespec64
+# define TIMESPEC_TO_KTIME timespec64_to_ktime
+#else
+# define TIMESPEC          timespec
+# define TIMESPEC_TO_KTIME timespec_to_ktime
+#endif
 
 /* This checks if we already received the timestamp interrupt */
 void wrn_tx_tstamp_skb(struct wrn_dev *wrn, int desc)
@@ -21,7 +30,7 @@ void wrn_tx_tstamp_skb(struct wrn_dev *wrn, int desc)
 	struct skb_shared_hwtstamps *hwts;
 	struct wrn_desc_pending	 *d = wrn->skb_desc + desc;
 	struct sk_buff *skb = d->skb;
-	struct timespec ts;
+	struct TIMESPEC ts;
 	u32 counter_ppsg; /* PPS generator nanosecond counter */
 	u32 utc;
 
@@ -39,7 +48,7 @@ void wrn_tx_tstamp_skb(struct wrn_dev *wrn, int desc)
 	ts.tv_nsec = d->cycles * NSEC_PER_TICK;
 	if (! (d->valid & TS_INVALID)) {
 		hwts = skb_hwtstamps(skb);
-		hwts->hwtstamp = timespec_to_ktime(ts);
+		hwts->hwtstamp = TIMESPEC_TO_KTIME(ts);
 		skb_tstamp_tx(skb, hwts);
 	}
 	dev_kfree_skb_irq(skb);
@@ -55,7 +64,7 @@ static int record_tstamp(struct wrn_dev *wrn, u32 tsval, u32 idreg, u32 r2)
 	int frame_id = TXTSU_TSF_R1_FID_R(idreg);
 	int ts_incorrect = r2 & TXTSU_TSF_R2_INCORRECT;
 	struct skb_shared_hwtstamps *hwts;
-	struct timespec ts;
+	struct TIMESPEC ts;
 	struct sk_buff *skb;
 	u32 utc, counter_ppsg; /* PPS generator nanosecond counter */
 	int i;
@@ -84,7 +93,7 @@ static int record_tstamp(struct wrn_dev *wrn, u32 tsval, u32 idreg, u32 r2)
 	/* Provide the timestamp  only if 100% sure about its correctness */
 	if (!ts_incorrect) {
 		hwts = skb_hwtstamps(skb);
-		hwts->hwtstamp = timespec_to_ktime(ts);
+		hwts->hwtstamp = TIMESPEC_TO_KTIME(ts);
 		skb_tstamp_tx(skb, hwts);
 	}
 	dev_kfree_skb_irq(skb);

@@ -19,28 +19,31 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
+#include <linux/fmc.h>
 #include <linux/io.h>
 
 #include "wr-nic.h"
 #include "nic-mem.h"
 #include "../spec-nic.h"
 
-/* The remove function is used by probe, so it's not __devexit */
+/* The remove function is used by probe, so it's not __devexit
+   This is referred to as "the platform driver's remove (wrn_remove)" */
 static int wrn_remove(struct platform_device *pdev)
 {
 	struct wrn_drvdata *drvdata = pdev->dev.platform_data;
 	struct wrn_dev *wrn = drvdata->wrn;
 	int i;
+# define STRx( x ) #x
+# define XSTRx( x ) #x
+	char *ss = XSTRx(WRN_IRQ_NUMBERS);
 
-#if 0
-	spin_lock(&wrn->lock);
-	--wrn->use_count; /* Hmmm... looks like overkill... */
-	spin_unlock(&wrn->lock);
-#endif
+	printk("device.c:wrn_remove: (start) before stop any transmission\n");
 
-	/* First of all, stop any transmission */
+	/* 1. stop the NIC (i.e stop any transmission) */
 	writel(0, &wrn->regs->CR);
 
+    /* 2. free the network interfaces that were created */
+	printk("device.c:wrn_remove: before wrn_mez....\n");
 	/* Then remove devices, memory maps, interrupts */
 	for (i = 0; i < WRN_NR_ENDPOINTS; i++) {
 		if (wrn->dev[i]) {
@@ -51,18 +54,39 @@ static int wrn_remove(struct platform_device *pdev)
 		}
 	}
 
+    /* 3. iounmap the memory regions */
+	printk("device.c:wrn_remove: before iounmap\n");
 	for (i = 0; i < ARRAY_SIZE(wrn->bases); i++) {
-		if (wrn->bases[i])
+		if (wrn->bases[i]) {
+			printk("device.c:wrn_remove: iounmap(%p)\n", (void*)wrn->bases[i]);
 			iounmap(wrn->bases[i]);
+		}
 	}
 
+    /* 4. free the **IRQ** that was requested in wrn_eth_init() */
+	printk("device.c:wrn_remove: before Unregister all interrupts\n");
 	/* Unregister all interrupts that were registered */
-	for (i = 0; wrn->irq_registered; i++) {
-		static int irqs[] = WRN_IRQ_NUMBERS;
-		if (wrn->irq_registered & (1 << i))
-			free_irq(irqs[i], wrn);
-		wrn->irq_registered &= ~(1 << i);
-	}
+	printk("device.c:wrn_remove: before Unregister... WRN_IRQ_NUMBERS is %s\n", ss );
+	printk("device.c:wrn_remove: before Unregister... wrn->irq_registered=0x%x\n",wrn->irq_registered );
+    if (drvdata->irq_owned && drvdata->fmc) {
+        printk("device.c:wrn_remove: freeing FMC IRQ\n");
+        drvdata->fmc->op->irq_free(drvdata->fmc);
+		drvdata->irq_owned = false;           /* clear the flag */
+    }
+
+	/* 5. remove the GPIO chip --------------------------- */
+	printk("device.c:wrn_remove: SHOULD call wrn_gpio_exit(fmc) (%p)drvdata->gc(%p) (SHOULD BE NON-0)\n",
+	       drvdata, drvdata->gc);
+	if (drvdata->gc) {
+        wrn_gpio_exit(drvdata->fmc);   /* strong implementation in wr?nic?gpio.c */
+        drvdata->gc = NULL;
+    }
+
+    /* 6. tear down the tasklet */
+	printk("device.c:wrn_remove: before tasklet_kill\n");
+	tasklet_kill( &wrn->rx_tlet );
+
+	printk("device.c:wrn_remove: before return\n");
 	return 0;
 }
 
@@ -92,6 +116,7 @@ static int __wrn_map_resources(struct platform_device *pdev)
 		/* Hack: find the block number and fill the array */
 		pr_debug("Remapped %08lx (block %i) to %p\n",
 			 (long)res->start, i, ptr);
+		printk("device.c:__wrn_map_resources: ioremap(...)=%p\n",(void*)ptr);
 		wrn->bases[i] = ptr;
 	}
 	return 0;
@@ -105,26 +130,9 @@ static int wrn_probe(struct platform_device *pdev)
 	struct wrn_dev *wrn = drvdata->wrn;
 	int i, err = 0;
 
-#if 0
-	/* Lazily: irqs are not in the resource list */
-	static int irqs[] = WRN_IRQ_NUMBERS;
-	static char *irq_names[] = WRN_IRQ_NAMES;
-	static irq_handler_t irq_handlers[] = WRN_IRQ_HANDLERS;
-#endif
-
-
-	/* No need to lock_irq: we only protect count and continue unlocked */
-#if 0
-	spin_lock(&wrn->lock);
-	if (++wrn->use_count != 1) {
-		--wrn->use_count;
-		spin_unlock(&wrn->lock);
-		printk("use count %i\n", wrn->use_count);
-		return -EBUSY;
-	}
-	spin_unlock(&wrn->lock);
-#endif
 	/* Map our resource list and instantiate the shortcut pointers */
+	printk("device.c:wrn_probe: calling __wrn_map_resources(pdev) w/pdev->num_resources=%d\n",
+		pdev->num_resources);
 	if ( (err = __wrn_map_resources(pdev)) )
 		goto out;
 	wrn->regs = wrn->bases[WRN_FB_NIC];
@@ -138,15 +146,6 @@ static int wrn_probe(struct platform_device *pdev)
 		printk("regs %p, txd %p, rxd %p, buffer %p\n",
 		       wrn->regs, wrn->txd, wrn->rxd, wrn->databuf);
 
-#if 0
-	/* Register the interrupt handlers (not shared) */
-	for (i = 0; i < ARRAY_SIZE(irq_names); i++) {
-		err = request_irq(irqs[i], irq_handlers[i],
-			      IRQF_TRIGGER_LOW, irq_names[i], wrn);
-		if (err) goto out;
-		wrn->irq_registered |= 1 << i;
-	}
-#endif
 	/* Reset the device, just to be sure, before making anything */
 	writel(0, &wrn->regs->CR);
 	mdelay(10);
@@ -154,6 +153,7 @@ static int wrn_probe(struct platform_device *pdev)
 	/* Finally, register one interface per endpoint */
 	memset(wrn->dev, 0, sizeof(wrn->dev));
 	for (i = 0; i < WRN_NR_ENDPOINTS; i++) {
+		printk("device.c:wrn_probe: before alloc_etherdev(...)\n");
 		netdev = alloc_etherdev(sizeof(struct wrn_ep));
 		netdev->dev.parent = &pdev->dev;
 		if (!netdev) {
@@ -166,10 +166,6 @@ static int wrn_probe(struct platform_device *pdev)
 		ep->wrn = wrn;
 		ep->ep_regs = wrn->bases[WRN_FB_EP] + i * FPGA_SIZE_EACH_EP;
 		ep->ep_number = i;
-#if 0 /* FIXME: UPlink or not? */
-		if (i < WRN_NR_UPLINK)
-			set_bit(WRN_EP_IS_UPLINK, &ep->ep_flags);
-#endif
 
 		/* The netdevice thing is registered from the endpoint */
 		err = wrn_endpoint_probe(netdev);
@@ -214,6 +210,7 @@ static int wrn_probe(struct platform_device *pdev)
 	writel(WRN_IRQ_ALL, (void *)wrn->regs + 0x24 /* EIC_IER */);
 
 	wrn_tstamp_init(wrn);
+	printk("device.c:wrn_probe: done, returning success\n");msleep(100);
 	err = 0;
 out:
 	if (err) {
@@ -224,6 +221,7 @@ out:
 	}
 	return err;
 }
+
 
 /* This is not static as ./module.c is going to register it */
 struct platform_driver wrn_driver = {

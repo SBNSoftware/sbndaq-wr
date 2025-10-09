@@ -17,10 +17,19 @@
 #include <linux/errno.h>
 #include <linux/spinlock.h>
 #include <linux/net_tstamp.h>
+#include <linux/version.h>
 #include <asm/unaligned.h>
 
 #include "wr-nic.h"
 #include "nic-mem.h"
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+# define TIMESPEC          timespec64
+# define TIMESPEC_TO_KTIME timespec64_to_ktime
+#else
+# define TIMESPEC          timespec
+# define TIMESPEC_TO_KTIME timespec_to_ktime
+#endif
 
 /*
  * The following functions are the standard network device operations.
@@ -32,6 +41,7 @@ static int wrn_open(struct net_device *dev)
 	struct wrn_ep *ep = netdev_priv(dev);
 	u32 val;
 
+	printk("nic-core.c:wrn_open: start\n");
 	/* This is "open" just for an endpoint. The nic hw is already on */
 	//netdev_dbg(dev, "%s\n", __func__);
 
@@ -59,6 +69,7 @@ static int wrn_open(struct net_device *dev)
 	writel (val | EP_RFCR_MRU_W(2048), &ep->ep_regs->RFCR);
 
 	/* Most drivers call platform_set_drvdata() but we don't need it */
+	printk("nic-core.c:wrn_open: return 0\n");
 	return 0;
 }
 
@@ -67,6 +78,7 @@ static int wrn_close(struct net_device *dev)
 	struct wrn_ep *ep = netdev_priv(dev);
 	int ret;
 
+	printk("nic-core.c:wrn_close start\n");
 	if ( (ret = wrn_ep_close(dev)) )
 		return ret;
 
@@ -83,6 +95,7 @@ static int wrn_set_mac_address(struct net_device *dev, void* vaddr)
 	struct sockaddr *addr = vaddr;
 	u32 val;
 
+	printk("nic-core.c:wrn_set_mac_address: start %s\n",__func__);
 	//netdev_dbg(dev, "%s\n", __func__);
 
 	if (!is_valid_ether_addr(addr->sa_data)) {
@@ -231,11 +244,13 @@ struct net_device_stats *wrn_get_stats(struct net_device *dev)
 int __weak wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 			       int cmd)
 {
+	printk("nic-core.c:wrn_mezzanine_ioctl weak wrn_mezzanine_ioctl - returns -ENOIOCTLCMD\n");
 	return -ENOIOCTLCMD;
 }
 
 int __weak wrn_mezzanine_init(struct net_device *dev)
 {
+	printk("nic-core.c:wrn_mezzanine_init: weak %s - does nothing\n",__func__);
 	return 0;
 }
 
@@ -251,6 +266,7 @@ static int wrn_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	int res;
 	u32 reg;
 
+	printk("nic-core.c:wrn_ioctl: start\n");
 	switch (cmd) {
 	case SIOCSHWTSTAMP:
 		return wrn_tstamp_ioctl(dev, rq, cmd);
@@ -293,6 +309,13 @@ static int wrn_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 }
 
+
+static int dummy_ioctlpriv(struct net_device *dev, struct ifreq *ifr, void*, int cmd)
+{
+    pr_info(">>> dummy_ioctlpriv(dev=%s) called: cmd = 0x%x\n", dev->name, cmd);
+    return  wrn_ioctl(dev, ifr, cmd);
+}
+
 static const struct net_device_ops wrn_netdev_ops = {
 	.ndo_open		= wrn_open,
 	.ndo_stop		= wrn_close,
@@ -301,6 +324,8 @@ static const struct net_device_ops wrn_netdev_ops = {
 	.ndo_get_stats		= wrn_get_stats,
 	.ndo_set_mac_address	= wrn_set_mac_address,
 	.ndo_do_ioctl		= wrn_ioctl,
+        .ndo_eth_ioctl          = wrn_ioctl,
+        .ndo_siocdevprivate     = dummy_ioctlpriv,
 #if 0
 	/* Missing ops, possibly to add later */
 	.ndo_set_multicast_list	= wrn_set_multicast_list,
@@ -312,6 +337,7 @@ static const struct net_device_ops wrn_netdev_ops = {
 
 int wrn_netops_init(struct net_device *dev)
 {
+	printk("nic-core.c:wrn_netops_init: start, setting netdev_ops\n");
 	dev->netdev_ops = &wrn_netdev_ops;
 	return 0;
 }
@@ -329,7 +355,7 @@ static void __wrn_rx_descriptor(struct wrn_dev *wrn, int desc)
 	int epnum, off, len;
 	u32 ts_r, ts_f;
 	struct skb_shared_hwtstamps *hwts;
-	struct timespec ts;
+	struct TIMESPEC ts;
 	u32 counter_ppsg; /* PPS generator nanosecond counter */
 	u32 utc;
 	s32 cntr_diff;
@@ -392,8 +418,8 @@ static void __wrn_rx_descriptor(struct wrn_dev *wrn, int desc)
 	ts.tv_nsec = ts_r * NSEC_PER_TICK;
 
 	pr_debug("Timestamp: %li:%li, ahead = %d\n",
-	       ts.tv_sec & 0x7fffffff,
-	       ts.tv_nsec & 0x7fffffff,
+	         (long int)ts.tv_sec & 0x7fffffff,
+	         (long int)ts.tv_nsec & 0x7fffffff,
 	       ts.tv_sec & 0x80000000 ? 1 :0);
 
 	if (1) {
@@ -404,7 +430,7 @@ static void __wrn_rx_descriptor(struct wrn_dev *wrn, int desc)
 
 	if (! (r1 & NIC_RX1_D1_TS_INCORRECT)) {
 		hwts = skb_hwtstamps(skb);
-		hwts->hwtstamp = timespec_to_ktime(ts);
+		hwts->hwtstamp = TIMESPEC_TO_KTIME(ts);
 	}
 
 	skb->protocol = eth_type_trans(skb, dev);
