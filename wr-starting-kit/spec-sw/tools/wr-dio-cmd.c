@@ -134,8 +134,8 @@ static int scan_pulse(int argc, char **argv)
 
 	ifr.ifr_data = (void *)cmd;
 	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) {
-		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
-			prgname, ifname, strerror(errno));
+		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s %i \n",
+			prgname, ifname, strerror(errno),errno);
 			return -1;
 	}
 	return 0;
@@ -186,8 +186,8 @@ static int scan_stamp(int argc, char **argv, int ismask)
 		if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0 ) {
 			if (errno == EAGAIN)
 				break;
-			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): "
-				"%s\n", prgname, ifname, strerror(errno));
+			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s))  DT : "
+				"%s %i \n", prgname, ifname, strerror(errno), errno);
 		return -1;
 		}
 		for (i = 0; i < cmd->nstamp; i++)
@@ -300,8 +300,8 @@ static int scan_inout(int argc, char **argv)
 	}
 	ifr.ifr_data = (void *)cmd;
 	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) {
-		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
-			prgname, ifname, strerror(errno));
+		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s %i \n",
+			prgname, ifname, strerror(errno), errno );
 			return -1;
 	}
 	return 0;
@@ -333,8 +333,8 @@ int main(int argc, char **argv)
 	if (ioctl(sock, PRIV_MEZZANINE_ID, &ifr) < 0
 	    /* EAGAIN is special: it means we have no ID to check yet */
 		&& errno != EAGAIN) {
-		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_ID(%s)): %s\n",
-			prgname, ifname, strerror(errno));
+		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_ID(%s))  DT : %s %i \n",
+			prgname, ifname, strerror(errno), errno );
 	}
 
 	/*

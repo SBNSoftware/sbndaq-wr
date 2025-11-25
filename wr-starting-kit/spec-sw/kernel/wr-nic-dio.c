@@ -336,6 +336,7 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 	ktime_t t, t0;
 	int ret;
 
+	printk("in strong wrn_mezzanine_ioctl\n");
 	if (ioctlcmd == PRIV_MEZZANINE_ID)
 		return -EAGAIN; /* Special marker */
 	if (ioctlcmd != PRIV_MEZZANINE_CMD)
