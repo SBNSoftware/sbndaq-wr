@@ -31,6 +31,9 @@ static int wrn_remove(struct platform_device *pdev)
 	struct wrn_drvdata *drvdata = pdev->dev.platform_data;
 	struct wrn_dev *wrn = drvdata->wrn;
 	int i;
+#define STRx( x ) #x
+#define XSTRx( x ) #x
+	char *ss = XSTRx(WRN_IRQ_NUMBERS);
 
 #if 0
 	spin_lock(&wrn->lock);
@@ -38,9 +41,11 @@ static int wrn_remove(struct platform_device *pdev)
 	spin_unlock(&wrn->lock);
 #endif
 
+	printk("In wrn_remove: (start) before stop any transmission\n");
 	/* First of all, stop any transmission */
 	writel(0, &wrn->regs->CR);
 
+	printk("In wrn_remove: before wrn_mez....\n");
 	/* Then remove devices, memory maps, interrupts */
 	for (i = 0; i < WRN_NR_ENDPOINTS; i++) {
 		if (wrn->dev[i]) {
@@ -51,18 +56,26 @@ static int wrn_remove(struct platform_device *pdev)
 		}
 	}
 
+	printk("In wrn_remove: before iounmap\n");
 	for (i = 0; i < ARRAY_SIZE(wrn->bases); i++) {
 		if (wrn->bases[i])
 			iounmap(wrn->bases[i]);
 	}
 
+	printk("In wrn_remove: before Unregister all interrupts\n");
 	/* Unregister all interrupts that were registered */
+	printk("In wrn_remove: before Unregister... WRN_IRQ_NUMBERS is %s\n", ss );
+        printk("In wrn_remove: before Unregister... wrn->irq_registered=0x%x\n",wrn->irq_registered );
 	for (i = 0; wrn->irq_registered; i++) {
 		static int irqs[] = WRN_IRQ_NUMBERS;
-		if (wrn->irq_registered & (1 << i))
+                printk("n wrn_remove: i=%d\n", i );
+		if (wrn->irq_registered & (1 << i)) {
+                        printk("In wrn_remove: freeing irqs[i]=%d\n", irqs[i]);
 			free_irq(irqs[i], wrn);
+                }
 		wrn->irq_registered &= ~(1 << i);
 	}
+	printk("In wrn_remove: before return!\n");
 	return 0;
 }
 
