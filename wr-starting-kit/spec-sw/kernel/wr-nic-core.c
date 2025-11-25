@@ -11,12 +11,13 @@
 #include <linux/init.h>
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
-#include <linux/delay.h>
+#include <linux/delay.h>		/* msleep */
 #include <linux/fmc.h>
 #include <linux/fmc-sdb.h>
 #include "spec-nic.h"
 #include "wr_nic/wr-nic.h"
 
+extern struct platform_device *wrn_global_pdev;
 static struct fmc_driver wrn_drv;
 FMC_PARAM_BUSID(wrn_drv);
 FMC_PARAM_GATEWARE(wrn_drv);
@@ -161,18 +162,42 @@ int wrn_fmc_probe(struct fmc_device *fmc)
 		goto out;
 
 	/* The network device */
+	printk("wr-nic-core.c:wrn_fmc_probe: before call to wr-nic-eth.c:wrn_eth_init(fmc)\n");msleep(100);
 	ret = wrn_eth_init(fmc);
 	if (ret < 0)
 		wrn_gpio_exit(fmc);
+	printk("wr-nic-core.c:wrn_fmc_probe: after wr-nic-eth.c:wrn_eth_init(fmc)\n");msleep(100);
 out:
 	return ret;
 }
 
+/* This is referred to as "the FMC driver's remove()" */
 int wrn_fmc_remove(struct fmc_device *fmc)
 {
+    /* The platform device we created in wrn_eth_init() is stored in
+       fmc->mezzanine_data.  Grab it now. */
+    struct platform_device *pdev = fmc->mezzanine_data;
+
+	printk("wr-nic-core.c:wrn_fmc_remove: start fmc=%p pdev=%p\n",
+	       (void*)fmc,(void*)pdev);msleep(100);
+    if (!fmc->mezzanine_data) {
+        printk("wr-nic-core.c:%s: platform device already removed ? nothing to do\n",
+                 __func__);
+        return 0;
+    }
+
 	wrn_eth_exit(fmc);
 	wrn_gpio_exit(fmc);
 	fmc_free_sdb_tree(fmc);
+
+    /* ---- THIS IS THE ONLY place where we delete the platform device ---- */
+    if (pdev) {
+        printk("wr-nic-core.c:%s: calling platform_device_unregister(%p)\n",
+                 __func__, pdev);
+        platform_device_unregister(pdev);
+        fmc->mezzanine_data = NULL;   /* break the back?pointer */
+    }
+
 	return 0;
 }
 
@@ -197,19 +222,34 @@ static int wrn_init(void)
 {
 	int ret;
 
+	printk("wr-nic-core.c:wrn_init: start\n");msleep(100);
 	ret = fmc_driver_register(&wrn_fmc_drv);
 	if (ret < 0)
 		return ret;
-	platform_driver_register(&wrn_driver);
+	ret = platform_driver_register(&wrn_driver);
 	if (ret < 0)
 		fmc_driver_unregister(&wrn_fmc_drv);
+	printk("wr-nic-core.c:wrn_init: finished\n");msleep(100);
 	return ret;
 }
 
-static void wrn_exit(void)
+static void __exit wrn_exit(void)
 {
-	platform_driver_unregister(&wrn_driver);
+	printk("wr-nic-core.c:wrn_exit: start\n");msleep(100);
+
+	printk("wr-nic-core.c:wrn_exit: before platform_driver_unregister\n");msleep(100);
+	platform_driver_unregister(&wrn_driver); // this was 1st, but better 2nd? No, keep 1st
+
+	printk("wr-nic-core.c:wrn_exit: before fmc_driver_unregister\n");msleep(100);
 	fmc_driver_unregister(&wrn_fmc_drv);
+
+    if (wrn_global_pdev) {
+		printk("wr-nic-core.c:wrn_exit: before platform_device_unregister\n");
+        platform_device_unregister(wrn_global_pdev);
+        wrn_global_pdev = NULL;
+    }
+
+	printk("wr-nic-core.c:wrn_exit: finished\n");msleep(100);
 }
 
 module_init(wrn_init);
@@ -218,10 +258,12 @@ module_exit(wrn_exit);
 /* If no gpio lib is there, this weak applies */
 int __weak wrn_gpio_init(struct fmc_device *fmc)
 {
+	printk("wr-nic-core.c:%s: __weak start SHOULD NOT SEE!\n",__func__);
 	return 0;
 }
 void __weak wrn_gpio_exit(struct fmc_device *fmc)
 {
+	printk("wr-nic-core.c:%s: __weak start SHOULD NOT SEE!\n",__func__);
 }
 
 MODULE_VERSION(GIT_VERSION);

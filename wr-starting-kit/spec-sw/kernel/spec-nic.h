@@ -81,6 +81,14 @@ struct wrn_drvdata {
 	__iomem void *gpio_base;
 	__iomem void *wrdio_base;
 	__iomem void *ppsg_base;
+
+	/* ------------------------------------------------------------
+     * NEW: IRQ ownership flag.
+     *
+     *   true  ? we have called fmc->op->irq_request() and must free it
+     *   false ? the IRQ has already been freed (or was never allocated)
+     * ------------------------------------------------------------ */
+	bool          irq_owned;
 };
 
 /* wr-nic-eth.c */

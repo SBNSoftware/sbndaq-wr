@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/delay.h>
 #include <linux/fmc.h>
 
 static int fmc_check_version(unsigned long version, const char *name)
@@ -28,7 +29,7 @@ static int fmc_check_version(unsigned long version, const char *name)
 	return 0;
 }
 
-static int fmc_uevent(struct device *dev, struct kobj_uevent_env *env)
+int fmc_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	/* struct fmc_device *fdev = to_fmc_device(dev); */
 
@@ -45,7 +46,7 @@ static int fmc_probe(struct device *dev)
 	return fdrv->probe(fdev);
 }
 
-static int fmc_remove(struct device *dev)
+static int  fmc_remove(struct device *dev)
 {
 	struct fmc_driver *fdrv = to_fmc_driver(dev->driver);
 	struct fmc_device *fdev = to_fmc_device(dev);
@@ -63,7 +64,7 @@ static struct bus_type fmc_bus_type = {
 	.match = fmc_match,
 	.uevent = fmc_uevent,
 	.probe = fmc_probe,
-	.remove = fmc_remove,
+	// no .remove = fmc_remove
 	.shutdown = fmc_shutdown,
 };
 
@@ -124,16 +125,22 @@ static struct bin_attribute fmc_eeprom_attr = {
 
 int fmc_driver_register(struct fmc_driver *drv)
 {
+	int ret;
 	if (fmc_check_version(drv->version, drv->driver.name))
 		return -EINVAL;
 	drv->driver.bus = &fmc_bus_type;
-	return driver_register(&drv->driver);
+	printk("fmc-core.c:fmc_driver_register: before driver_register\n");msleep(100);
+	ret = driver_register(&drv->driver);
+	printk("fmc-core.c:fmc_driver_register: after driver_register, ret=%d\n",ret);msleep(100);
+	return ret;
 }
 EXPORT_SYMBOL(fmc_driver_register);
 
 void fmc_driver_unregister(struct fmc_driver *drv)
 {
+	printk("fmc-core.c:fmc_driver_unregister(*drv): before driver_unregister(&drv->driver)\n");msleep(100);
 	driver_unregister(&drv->driver);
+	printk("fmc-core.c:fmc_driver_unregister(*drv): after driver_unregister(...)\n");msleep(100);
 }
 EXPORT_SYMBOL(fmc_driver_unregister);
 

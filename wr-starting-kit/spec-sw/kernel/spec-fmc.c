@@ -8,6 +8,7 @@
  * by CERN, the European Institute for Nuclear Research.
  */
 #include <linux/module.h>
+#include <linux/delay.h>		/* msleep */
 #include <linux/slab.h>
 #include <linux/fmc.h>
 #include <linux/interrupt.h>
@@ -15,6 +16,7 @@
 #include <linux/gpio.h>
 #include <linux/fmc-sdb.h>
 #include "spec.h"
+#include "spec-nic.h"
 
 static int spec_test_irq;
 module_param_named(test_irq, spec_test_irq, int, 0444);
@@ -100,9 +102,11 @@ static int spec_irq_request(struct fmc_device *fmc, irq_handler_t handler,
 	int ret;
 	u32 value;
 
+	printk("spec-fmc.c:spec_irq_request: irq=%d spec_use_msi=%d\n",fmc->irq,spec_use_msi);msleep(100);
 	ret = request_irq(fmc->irq, handler, flags, name, fmc);
 	if (ret)
 		return ret;
+	spec->irq_requested = true;
 
 	if (spec_use_msi) {
 		/* A check and a hack, but doesn't work on all computers */
@@ -115,6 +119,7 @@ static int spec_irq_request(struct fmc_device *fmc, irq_handler_t handler,
 	}
 
 	/* Interrupts are enabled by the driver, with gpio_config() */
+	printk("spec-fmc.c:spec_irq_request: Finished\n");msleep(100);
 	return 0;
 }
 
@@ -133,9 +138,21 @@ static void spec_irq_ack(struct fmc_device *fmc)
 static int spec_irq_free(struct fmc_device *fmc)
 {
 	struct spec_dev *spec = fmc->carrier_data;
+	struct wrn_drvdata *drvdata = fmc_get_drvdata(fmc);
 
+	printk("spec-fmc.c:spec_irq_free: start fmc->irq=%d drvdata=%p\n",
+	       fmc->irq,drvdata);msleep(100);
+	if (!spec->irq_requested) {          /* <<< guard */
+		printk("spec-fmc.c:spec_irq_free: IRQ never requested ? skip free\n");
+		return 0;
+    }
 	gennum_writel(spec, 0xffff, GNGPIO_INT_MASK_SET); /* disable */
-	free_irq(fmc->irq, fmc);
+	if (drvdata==NULL || drvdata->irq_owned){ /* tricky */
+		printk("spec-fmc.c:spec_irq_free: calling free_irq(%d,fmc)\n",fmc->irq);
+		free_irq(fmc->irq, fmc);
+	} else {
+		printk("spec-fmc.c:spec_irq_free: irq_owned==false - skip free_irq()\n");
+	}
 	return 0;
 }
 
@@ -306,6 +323,7 @@ static int spec_irq_init(struct fmc_device *fmc)
 	uint32_t value;
 	int i;
 
+	printk("spec-fmc.c:spec_irq_init: spec_use_msi=%d\n",spec_use_msi);
 	if (spec_use_msi) {
 		/*
 		 * Enable multiple-msi to work around a chip design bug.
@@ -332,14 +350,18 @@ static int spec_irq_init(struct fmc_device *fmc)
 		gennum_writel(spec, 0x800c, GNINT_CFG(0 /* first one */ ));
 
 	/* Finally, ensure we are able to receive it -- if the user asked to */
-	if (spec_test_irq == 0)
+	if (spec_test_irq == 0){
+		printk("spec-fmc.c:spec_irq_init: spec_test_irq == 0 -- return 0\n");
 		return 0;
+	}
 	spec->irq_count = 0;
 	init_completion(&spec->compl);
+	printk("spec-fmc.c:spec_irq_init: calling fmc->op->irq_request()\n");msleep(100);
 	fmc->op->irq_request(fmc, spec_test_handler, "spec-test", IRQF_SHARED);
 	gennum_writel(spec, 8, GNINT_STAT);
 	gennum_writel(spec, 0, GNINT_STAT);
 	wait_for_completion_timeout(&spec->compl, msecs_to_jiffies(50));
+	printk("spec-fmc.c:spec_irq_init: calling fmc->op->irq_free()\n");msleep(100);
 	fmc->op->irq_free(fmc);
 	if (!spec->irq_count) {
 		dev_err(&spec->pdev->dev, "Can't receive interrupt\n");
@@ -360,6 +382,7 @@ static void spec_irq_exit(struct fmc_device *fmc)
 	for (i = 0; i < 7; i++)
 		gennum_writel(spec, 0, GNINT_CFG(i));
 	fmc->op->irq_ack(fmc); /* just to be safe */
+	printk("spec-fmc.c:spec_irq_exit supposedly disabled all spec-fmc interrupts\n");
 }
 
 static int check_golden(struct fmc_device *fmc)
@@ -450,11 +473,20 @@ out_free:
 void spec_fmc_destroy(struct spec_dev *spec)
 {
 	/* undo the things in the reverse order, but pin the device first */
+	printk("spec-fmc.c:spec_fmc_destroy: Start - calling get_device(&fmc->dev)\n");
 	get_device(&spec->fmc->dev);
+	printk("spec-fmc.c:%s: calling spec_gpio_exit; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	spec_gpio_exit(spec->fmc);
+	printk("spec-fmc.c:%s: calling fmc_device_unregister; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	fmc_device_unregister(spec->fmc);
+	printk("spec-fmc.c:%s: calling spec_irq_exit; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	spec_irq_exit(spec->fmc);
+	printk("spec-fmc.c:%s: calling spec_irq_free; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
+	spec_irq_free(spec->fmc);
+	printk("spec-fmc.c:%s: calling spec_i2c_exit; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	spec_i2c_exit(spec->fmc);
+	printk("spec-fmc.c:%s: calling put_device; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	put_device(&spec->fmc->dev);
+	printk("spec-fmc.c:%s: Finished setting fmc=0; drvdata=%p\n",__func__,fmc_get_drvdata(spec->fmc));
 	spec->fmc = NULL;
 }

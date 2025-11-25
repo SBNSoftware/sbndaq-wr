@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/delay.h>		/* msleep */
 #include <linux/fmc.h>
 #include <linux/fmc-sdb.h>
 #include "spec.h"
@@ -18,6 +19,8 @@
 #include "wr-dio.h"
 #include "wr_nic/wr-nic.h"
 #include "wbgen-regs/vic-regs.h"
+
+struct platform_device *wrn_global_pdev = NULL;
 
 /*
  * nic-device.c defines a platform driver. We need to allocate
@@ -28,6 +31,7 @@
 static void wrn_release(struct device *dev)
 {
 	/* nothing to do, but mandatory function */
+	printk("wr-nic-eth.c:wrn_release - does nothing\n");msleep(100);
 	pr_debug("%s\n", __func__);
 }
 
@@ -122,6 +126,7 @@ static void wrn_vic_exit(struct fmc_device *fmc)
 	struct platform_device *pdev = fmc->mezzanine_data;
 	struct wrn_drvdata *drvdata = pdev->dev.platform_data;
 	struct VIC_WB *vic = (typeof(vic))drvdata->vic_base;
+	printk("wr-nic-eth.c:wrn_vic_exit start\n");msleep(100);
 
 	writel(0xff, &vic->IDR);
 
@@ -182,20 +187,27 @@ int wrn_eth_init(struct fmc_device *fmc)
 	unsigned long size;
 	int i, ret;
 
+	printk("wr-nic-eth.c:wrn_eth_init(*fmc) start before fmc->op->irq_request(...)\n");msleep(100);
 	ret = fmc->op->irq_request(fmc, wrn_handler, "wr-nic", IRQF_SHARED);
 	if (ret < 0) {
 		dev_err(dev, "Can't request interrupt\n");
 		return ret;
 	}
+	drvdata = fmc_get_drvdata(fmc);
+	drvdata->irq_owned = true;	/* remember that we own the IRQ now. */
+
 	/* FIXME: we should request irq0, self-test and then move to irq1 */
 	fmc->op->gpio_config(fmc, wrn_gpio_cfg, ARRAY_SIZE(wrn_gpio_cfg));
 
 	/* Make a copy of the platform device and register it */
+	printk("wr-nic-eth.c:wrn_eth_init(*fmc) &wrn_pdev=%p\n",(void*)&wrn_pdev);msleep(100);
 	ret = -ENOMEM;
 	pdev = kmemdup(&wrn_pdev, sizeof(wrn_pdev), GFP_KERNEL);
 	resarr = kzalloc(sizeof(*resarr) * ARRAY_SIZE(wrn_cores), GFP_KERNEL);
-	drvdata = kzalloc(sizeof(*drvdata), GFP_KERNEL);
 	wrn =  kzalloc(sizeof(*wrn), GFP_KERNEL);
+#	if 0
+	drvdata = kzalloc(sizeof(*drvdata), GFP_KERNEL);
+#	endif
 
 	if (!pdev || !resarr || !drvdata || !wrn)
 		goto out_mem;
@@ -232,7 +244,13 @@ int wrn_eth_init(struct fmc_device *fmc)
 	drvdata->fmc = fmc;
 	pdev->dev.platform_data = drvdata;
 	fmc->mezzanine_data = pdev;
+	wrn_global_pdev = pdev;
+	printk("wr-nic-eth.c:wrn_eth_init(*fmc) before platform_device_register(pdev=%p)\n",
+	       (void*)pdev);msleep(100);
 	platform_device_register(pdev);
+	printk("wr-nic-eth.c:wrn_eth_init(*fmc) after platform_device_register(pdev=%p)\n",
+	       (void*)pdev);msleep(100);
+	//drvdata->gc = (would_need_cast_from_void*)fmc_get_drvdata(fmc)->gc;   /* copy the GPIO pointer */
 	wrn_vic_init(fmc);
 
 	wrn_pdev.id++; /* for the next one */
@@ -240,7 +258,7 @@ int wrn_eth_init(struct fmc_device *fmc)
 
 out_mem:
 	kfree(wrn);
-	kfree(drvdata);
+	//kfree(drvdata);  // don't free this if initialize to fmc_get_drvdata(fmc)
 	kfree(resarr);
 	kfree(pdev);
 	fmc->op->irq_free(fmc);
@@ -251,17 +269,25 @@ void wrn_eth_exit(struct fmc_device *fmc)
 {
 	struct platform_device *pdev = fmc->mezzanine_data;
 	struct wrn_drvdata *drvdata;
+	printk("wr-nic-eth.c:wrn_eth_exit: start, pdev=%p\n",(void*)pdev);msleep(100);
 
 	wrn_vic_exit(fmc);
-	if (pdev)
+	if (pdev) {
+		printk("wr-nic-eth.c:wrn_eth_exit: calling platform_device_unregister(pdev=%p)\n",
+		       (void*)pdev);msleep(100);
 		platform_device_unregister(pdev);
+	}
 	if (pdev) {
 		drvdata = pdev->dev.platform_data;
 		kfree(drvdata->wrn);
 		kfree(drvdata);
 		kfree(pdev->resource);
 		kfree(pdev);
+		printk("wr-nic-eth.c:wrn_eth_exit: drvdata->irq_owned=%d\n",drvdata->irq_owned);
+		if (drvdata->irq_owned){
+			drvdata->irq_owned = false;
+			fmc->op->irq_free(fmc);
+		}
 	}
 	fmc->mezzanine_data = NULL;
-	fmc->op->irq_free(fmc);
 }

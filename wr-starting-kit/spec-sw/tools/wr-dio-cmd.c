@@ -133,6 +133,7 @@ static int scan_pulse(int argc, char **argv)
 	}
 
 	ifr.ifr_data = (void *)cmd;
+	/*fprintf(stderr,"%s: in scan_pulse:  Ron - before ioctl PRIV_MEZZANINE_CMD\n", prgname );*/
 	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) {
 		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
 			prgname, ifname, strerror(errno));
@@ -181,19 +182,23 @@ static int scan_stamp(int argc, char **argv, int ismask)
 
 	while (1) {
 		cmd->channel = ch;
+		fprintf(stderr,"%s: in scan_stamp: Ron - in while loop ch == %i \n", prgname, ch );
 		errno = 0;
 		ifr.ifr_data = (void *)cmd;
+                /*fprintf(stderr,"%s: in scan_stamp: Ron - before ioctl PRIV_MEZZANINE_CMD\n", prgname );*/
 		if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0 ) {
 			if (errno == EAGAIN)
 				break;
-			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): "
+				fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): NOT EAGAIN status ",
 				"%s\n", prgname, ifname, strerror(errno));
 		return -1;
 		}
+		fprintf(stderr,"%s: in scan_stamp: Ron - should loop over nstamp data %i \n", prgname, cmd->nstamp );
 		for (i = 0; i < cmd->nstamp; i++)
 			printf("ch %i, %9li.%09li\n", cmd->channel,
 			       (long)cmd->t[i].tv_sec, cmd->t[i].tv_nsec);
 	}
+	fprintf(stderr,"%s: in scan_stamp: Ron - exit and return 0 \n", prgname );
 	return 0;
 }
 
@@ -322,14 +327,16 @@ int main(int argc, char **argv)
 	argv++, argc--;
 
 	sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+	//sock = socket(AF_INET, SOCK_DGRAM, 0 );
 	if (sock < 0) {
 		fprintf(stderr, "%s: socket(): %s\n",
 			prgname, strerror(errno));
-		exit(1);
+	exit(1);
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	fprintf(stderr,"%s: in main: Ron - before ioctl PRIV_MEZZANINE_ID\n", prgname );
 	if (ioctl(sock, PRIV_MEZZANINE_ID, &ifr) < 0
 	    /* EAGAIN is special: it means we have no ID to check yet */
 		&& errno != EAGAIN) {

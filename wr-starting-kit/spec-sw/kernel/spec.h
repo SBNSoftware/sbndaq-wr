@@ -33,6 +33,8 @@ struct spec_dev {
 	int			irq_count;	/* for mezzanine use too */
 	struct completion	compl;
 	struct gpio_chip	*gpio;
+	int msix_enabled;
+	bool irq_requested;
 };
 
 #define SPEC_FLAG_FAKE_EEPROM		0x00000001

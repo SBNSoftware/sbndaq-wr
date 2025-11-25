@@ -12,6 +12,7 @@
 /* This should be included by both the kernel and the tools */
 
 #ifdef __KERNEL__
+#include <linux/version.h>
 #include "wbgen-regs/wr-dio-regs.h"
 
 /* For GPIO we have no wb-gen header */
@@ -77,7 +78,15 @@ struct wr_dio_cmd {
 	uint32_t value;		/* for DAC or I/O */
 	uint32_t flags;
 	uint32_t nstamp;	/* from kernel, if IN_STAMP */
+#if defined(__KERNEL__)
+# if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	struct timespec64 t[WR_DIO_N_STAMP];	/* may be from user */
+# else
 	struct timespec t[WR_DIO_N_STAMP];	/* may be from user */
+# endif
+#else
+	struct timespec  t[WR_DIO_N_STAMP];	/* may be from user - COULD THIS BE A PROBLEM??? */
+#endif
 };
 
 #define WR_DIO_F_NOW	0x01	/* Output is now, t[0] ignored */
