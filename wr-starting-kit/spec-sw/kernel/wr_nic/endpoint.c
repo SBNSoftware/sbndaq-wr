@@ -15,6 +15,8 @@
 #include <linux/errno.h>
 #include <linux/etherdevice.h>
 #include <linux/io.h>
+#include <linux/timer.h>
+#include <linux/version.h>
 
 #include "wr-nic.h"
 
@@ -26,6 +28,7 @@ int wrn_phy_read(struct net_device *dev, int phy_id, int location)
 {
 	struct wrn_ep *ep = netdev_priv(dev);
 	u32 val;
+	ep->dev = dev;
 
 	if (1) {
 		/*
@@ -49,6 +52,7 @@ void wrn_phy_write(struct net_device *dev, int phy_id, int location,
 		      int value)
 {
 	struct wrn_ep *ep = netdev_priv(dev);
+	ep->dev = dev;
 
 	if (1) {
 		/*
@@ -73,6 +77,7 @@ static void wrn_update_link_status(struct net_device *dev)
 {
 	struct wrn_ep *ep = netdev_priv(dev);
 	u32 ecr, bmsr, bmcr, lpa;
+	ep->dev = dev;
 
 	bmsr = wrn_phy_read(dev, 0, MII_BMSR);
 	bmcr = wrn_phy_read(dev, 0, MII_BMCR);
@@ -130,6 +135,20 @@ static void wrn_update_link_status(struct net_device *dev)
 }
 
 /* Actual timer function. Takes the lock and calls above function */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+static void wrn_ep_check_link(struct timer_list *tl)
+{
+	struct wrn_ep *ep = from_timer(ep, tl, ep_link_timer);
+    struct net_device *dev = ep->dev;  // Assuming a pointer to net_device is stored in ep
+    unsigned long flags;
+
+    spin_lock_irqsave(&ep->lock, flags);
+    wrn_update_link_status(dev);
+    spin_unlock_irqrestore(&ep->lock, flags);
+
+    mod_timer(&ep->ep_link_timer, jiffies + WRN_LINK_POLL_INTERVAL);
+}
+#else
 static void wrn_ep_check_link(unsigned long dev_id)
 {
 	struct net_device *dev = (struct net_device *) dev_id;
@@ -142,6 +161,7 @@ static void wrn_ep_check_link(unsigned long dev_id)
 
 	mod_timer(&ep->ep_link_timer, jiffies + WRN_LINK_POLL_INTERVAL);
 }
+#endif
 
 /* Endpoint open and close turn on and off the timer */
 int wrn_ep_open(struct net_device *dev)
@@ -178,7 +198,11 @@ int wrn_ep_open(struct net_device *dev)
 	wrn_phy_write(dev, 0, MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
 
 	/* Prepare the timer for link-up notifications */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	timer_setup(&ep->ep_link_timer, wrn_ep_check_link, timerarg);
+#else
 	setup_timer(&ep->ep_link_timer, wrn_ep_check_link, timerarg);
+#endif
 	if (0) {
 		/* not on spec */
 		mod_timer(&ep->ep_link_timer, jiffies + WRN_LINK_POLL_INTERVAL);
@@ -262,7 +286,10 @@ int wrn_endpoint_probe(struct net_device *dev)
 
 	if (0) {
 		/* randomize a MAC address, so lazy users can avoid ifconfig */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+#else
 		random_ether_addr(dev->dev_addr);
+#endif
 	} else {
 		/* on the SPEC the lm32 already configured the mac address */
 		val = readl(&ep->ep_regs->MACH);

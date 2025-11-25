@@ -197,6 +197,7 @@ static int wrn_init(void)
 {
 	int ret;
 
+	printk(KERN_INFO "Donatella and Ron are here -- hello!!!\n");
 	ret = fmc_driver_register(&wrn_fmc_drv);
 	if (ret < 0)
 		return ret;
