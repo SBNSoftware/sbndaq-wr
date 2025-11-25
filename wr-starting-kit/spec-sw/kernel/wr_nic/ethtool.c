@@ -17,14 +17,38 @@
 #include <linux/mii.h>
 #include <linux/ethtool.h>
 #include <linux/spinlock.h>
+#include <linux/version.h>
 
 #include "wr-nic.h"
 
-static int wrn_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+static int wrn_get_settings(struct net_device *dev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+                            struct ethtool_link_ksettings *cmd
+#else
+                            struct ethtool_cmd *cmd
+#endif
+                            )
 {
 	struct wrn_ep *ep = netdev_priv(dev);
-	int ret;
+	int ret=0;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	spin_lock_irq(&ep->lock);
+	mii_ethtool_get_link_ksettings(&ep->mii, cmd);
+	spin_unlock_irq(&ep->lock);
+
+	linkmode_set_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, cmd->link_modes.supported);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, cmd->link_modes.supported);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseKX_Full_BIT, cmd->link_modes.supported);
+
+	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseKX_Full_BIT, cmd->link_modes.advertising);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, cmd->link_modes.advertising);
+
+	cmd->base.port = PORT_FIBRE;
+	cmd->base.speed = SPEED_1000;
+	cmd->base.duplex = DUPLEX_FULL;
+	cmd->base.autoneg = AUTONEG_ENABLE;
+#else
 	spin_lock_irq(&ep->lock);
 	ret = mii_ethtool_gset(&ep->mii, cmd);
 	spin_unlock_irq(&ep->lock);
@@ -40,18 +64,28 @@ static int wrn_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 	cmd->speed = SPEED_1000;
 	cmd->duplex = DUPLEX_FULL;
 	cmd->autoneg = AUTONEG_ENABLE;
+#endif
 	return ret;
 }
 
-static int wrn_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+static int wrn_set_settings(struct net_device *dev,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+                            const struct ethtool_link_ksettings *cmd
+#else
+                            struct ethtool_cmd *cmd
+#endif
+                            )
 {
 	struct wrn_ep *ep = netdev_priv(dev);
 	int ret;
 
 	spin_lock_irq(&ep->lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	ret = mii_ethtool_set_link_ksettings(&ep->mii, cmd);
+#else
 	ret = mii_ethtool_sset(&ep->mii, cmd);
+#endif
 	spin_unlock_irq(&ep->lock);
-
 	return ret;
 }
 
@@ -83,8 +117,13 @@ static void wrn_get_drvinfo(struct net_device *dev,
  * get_eeprom/set_eeprom may be useful for a simple MAC address management.
  */
 static const struct ethtool_ops wrn_ethtool_ops = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	.get_link_ksettings = wrn_get_settings,
+	.set_link_ksettings = wrn_set_settings,
+#else
 	.get_settings	= wrn_get_settings,
 	.set_settings	= wrn_set_settings,
+#endif
 	.get_drvinfo	= wrn_get_drvinfo,
 	.nway_reset	= wrn_nwayreset,
 	/* Some of the default methods apply for us */

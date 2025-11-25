@@ -27,9 +27,11 @@
 
 #define ETHERBONE_IMPL
 
+#define _XOPEN_SOURCE 600   /* to get struct addrinfo */
 #include "posix-ip.h"
 #include "../glue/strncasecmp.h"
 
+#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 

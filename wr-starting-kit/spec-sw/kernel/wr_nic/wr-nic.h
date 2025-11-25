@@ -22,6 +22,8 @@
 /* The last two available are used for mezzanine-private stuff */
 #define PRIV_MEZZANINE_ID	(SIOCDEVPRIVATE + 14)
 #define PRIV_MEZZANINE_CMD	(SIOCDEVPRIVATE + 15)
+//#define PRIV_MEZZANINE_ID	(SIOCDEVPRIVATE + 5)
+//#define PRIV_MEZZANINE_CMD	(SIOCDEVPRIVATE + 6)
 
 #ifdef __KERNEL__ /* The rest is kernel-only */
 
@@ -125,6 +127,7 @@ struct wrn_ep {
 	int			pkt_count; /* used for tx stamping ID */
 
 	struct net_device_stats	stats;
+	struct net_device *dev;  /* mainly for modern (5.14) kernels */
 	//struct sk_buff		*current_skb;
 
 	//bool synced;
