@@ -104,12 +104,12 @@ static struct regmap regmap[] = {
 /* This is the structure we need to manage interrupts and loop internally */
 #define WRN_DIO_BUFFER_LEN  512
 struct dio_channel {
-	struct timespec tsbuf[WRN_DIO_BUFFER_LEN];
+	struct timespec64 tsbuf[WRN_DIO_BUFFER_LEN];
 	int bhead, btail;
 	wait_queue_head_t q;
 
 	/* The input event may fire a new pulse on this or another channel */
-	struct timespec prevts, delay;
+	struct timespec64 prevts, delay;
 	atomic_t count;
 	int target_channel;
 };
@@ -119,14 +119,14 @@ struct dio_device {
 };
 
 /* Instead of timespec_sub, just subtract the nanos */
-static inline void wrn_ts_sub(struct timespec *ts, int nano)
+static inline void wrn_ts_sub(struct timespec64 *ts, int nano)
 {
-	set_normalized_timespec(ts, ts->tv_sec, ts->tv_nsec - nano);
+	set_normalized_timespec64(ts, ts->tv_sec, ts->tv_nsec - nano);
 }
 
 /* This programs a new pulse without changing the width */
 static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
-			    struct timespec *ts)
+			    struct timespec64 *ts)
 {
 	struct DIO_WB __iomem *dio = drvdata->wrdio_base;
 	void __iomem *base = dio;
@@ -151,7 +151,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	struct dio_device *d = drvdata->mezzanine_data;
 	struct dio_channel *c;
 	struct regmap *map;
-	struct timespec *ts;
+	struct timespec64 *ts;
 	uint32_t reg;
 	int ch;
 
@@ -209,7 +209,7 @@ static int wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata,
 {
 	struct dio_device *d = drvdata->mezzanine_data;
 	struct dio_channel *c = 0;
-	struct timespec *ts = cmd->t;
+	struct timespec64 *ts = cmd->t;
 	struct regmap *map;
 	int mask, ch, last;
 	int nstamp = 0;
@@ -385,15 +385,15 @@ out:
 
 /* This is called from the interrupt handler to program a new pulse */
 static void wrn_trig_next_pulse(struct wrn_drvdata *drvdata,int ch,
-				struct dio_channel *c, struct timespec *ts)
+				struct dio_channel *c, struct timespec64 *ts)
 {
-	struct timespec newts;
+	struct timespec64 newts;
 
 	if (c->target_channel == ch) {
-		c->prevts = timespec_add(c->prevts, c->delay); 
+		c->prevts = timespec64_add(c->prevts, c->delay); 
 		newts = c->prevts;
 	} else {
-		newts = timespec_add(*ts, c->delay);
+		newts = timespec64_add(*ts, c->delay);
 	}
 	__wrn_new_pulse(drvdata, c->target_channel, &newts);
 
@@ -413,7 +413,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 	static ktime_t t_ini, t_end;
 	static int rate_avg;
 	struct dio_channel *c;
-	struct timespec *ts;
+	struct timespec64 *ts;
 	struct regmap *map;
 	uint32_t mask, reg;
 	int ch, chm;

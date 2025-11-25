@@ -12,6 +12,7 @@
 /* This should be included by both the kernel and the tools */
 
 #ifdef __KERNEL__
+#include "linux/time64.h"
 #include "wbgen-regs/wr-dio-regs.h"
 
 /* For GPIO we have no wb-gen header */
@@ -26,6 +27,8 @@ struct wrn_gpio_block {
 #define WRN_GPIO_VALUE(bit)	(1 << ((4 * (bit)) + 0))
 
 extern irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc);
+
+#else
 
 #endif /* __KERNEL__ */
 
@@ -77,7 +80,11 @@ struct wr_dio_cmd {
 	uint32_t value;		/* for DAC or I/O */
 	uint32_t flags;
 	uint32_t nstamp;	/* from kernel, if IN_STAMP */
+#ifdef __KERNEL__
+	struct timespec64 t[WR_DIO_N_STAMP];
+#else
 	struct timespec t[WR_DIO_N_STAMP];	/* may be from user */
+#endif
 };
 
 #define WR_DIO_F_NOW	0x01	/* Output is now, t[0] ignored */

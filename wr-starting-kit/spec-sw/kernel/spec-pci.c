@@ -108,7 +108,7 @@ static int spec_probe(struct pci_dev *pdev,
 		 * This should be "4" but arch/x86/kernel/apic/io_apic.c
 		 * says "x86 doesn't support multiple MSI yet".
 		 */
-		ret = pci_enable_msi_block(pdev, 1);
+		ret = pci_enable_msi(pdev);
 		if (ret < 0)
 			dev_err(&pdev->dev, "%s: enable msi block: error %i\n",
 				__func__, ret);
@@ -184,8 +184,11 @@ static void spec_remove(struct pci_dev *pdev)
 
 }
 
-
+#if 1
+const struct pci_device_id spec_idtable[] = {
+#else
 DEFINE_PCI_DEVICE_TABLE(spec_idtable) = {
+#endif
 	{ PCI_DEVICE(PCI_VENDOR_ID_CERN, PCI_DEVICE_ID_SPEC) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_GENNUM, PCI_DEVICE_ID_GN4124) },
 	{ 0,},
