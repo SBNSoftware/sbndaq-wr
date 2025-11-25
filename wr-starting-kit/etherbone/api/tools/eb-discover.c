@@ -25,8 +25,10 @@
  *******************************************************************************
  */
 
+#define _XOPEN_SOURCE 600   /* to get getnameinfo from netdb.h */
 #include "../transport/posix-udp.h"
 
+#include <netdb.h>
 #include <unistd.h> /* getopt */
 #include <stdio.h>
 #include <stdlib.h>

@@ -28,7 +28,7 @@ static int fmc_check_version(unsigned long version, const char *name)
 	return 0;
 }
 
-static int fmc_uevent(struct device *dev, struct kobj_uevent_env *env)
+int fmc_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	/* struct fmc_device *fdev = to_fmc_device(dev); */
 
@@ -45,7 +45,7 @@ static int fmc_probe(struct device *dev)
 	return fdrv->probe(fdev);
 }
 
-static int fmc_remove(struct device *dev)
+static int  fmc_remove(struct device *dev)
 {
 	struct fmc_driver *fdrv = to_fmc_driver(dev->driver);
 	struct fmc_device *fdev = to_fmc_device(dev);
@@ -63,7 +63,6 @@ static struct bus_type fmc_bus_type = {
 	.match = fmc_match,
 	.uevent = fmc_uevent,
 	.probe = fmc_probe,
-	.remove = fmc_remove,
 	.shutdown = fmc_shutdown,
 };
 

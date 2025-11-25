@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/io.h>
+#include <linux/version.h>
 #include <asm/unaligned.h>
 
 #include "spec.h"
@@ -108,7 +109,13 @@ static int spec_probe(struct pci_dev *pdev,
 		 * This should be "4" but arch/x86/kernel/apic/io_apic.c
 		 * says "x86 doesn't support multiple MSI yet".
 		 */
-		ret = pci_enable_msi_block(pdev, 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	  struct msix_entry msix_entry;
+	  msix_entry.entry = 0;
+	  ret = pci_enable_msix_exact(pdev, &msix_entry, 1);
+#else
+	  ret = pci_enable_msix_exact(pdev, 1);
+#endif
 		if (ret < 0)
 			dev_err(&pdev->dev, "%s: enable msi block: error %i\n",
 				__func__, ret);
@@ -185,11 +192,21 @@ static void spec_remove(struct pci_dev *pdev)
 }
 
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+static const struct pci_device_id spec_idtable[] = {
+    { PCI_DEVICE(PCI_VENDOR_ID_CERN, PCI_DEVICE_ID_SPEC) },
+    { PCI_DEVICE(PCI_VENDOR_ID_GENNUM, PCI_DEVICE_ID_GN4124) },
+    { 0, },
+};
+
+#else
 DEFINE_PCI_DEVICE_TABLE(spec_idtable) = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CERN, PCI_DEVICE_ID_SPEC) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_GENNUM, PCI_DEVICE_ID_GN4124) },
 	{ 0,},
 };
+#endif
+
 MODULE_DEVICE_TABLE(pci, spec_idtable);
 
 static struct pci_driver spec_driver = {

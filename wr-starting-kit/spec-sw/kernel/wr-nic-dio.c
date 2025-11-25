@@ -17,6 +17,7 @@
 #include <linux/fmc.h>
 #include <linux/fmc-sdb.h>
 #include <linux/rtnetlink.h>
+#include <linux/version.h>
 #include "spec-nic.h"
 #include "wr_nic/wr-nic.h"
 #include "wr-dio.h"
@@ -26,6 +27,14 @@
 #define wrn_stat 1
 #else
 #define wrn_stat 0
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+# define TIMESPEC     timespec64
+# define TIMESPEC_ADD timespec64_add
+#else
+# define TIMESPEC     timespec
+# define TIMESPEC_ADD timespec_add
 #endif
 
 /*
@@ -104,12 +113,12 @@ static struct regmap regmap[] = {
 /* This is the structure we need to manage interrupts and loop internally */
 #define WRN_DIO_BUFFER_LEN  512
 struct dio_channel {
-	struct timespec tsbuf[WRN_DIO_BUFFER_LEN];
+	struct TIMESPEC tsbuf[WRN_DIO_BUFFER_LEN];
 	int bhead, btail;
 	wait_queue_head_t q;
 
 	/* The input event may fire a new pulse on this or another channel */
-	struct timespec prevts, delay;
+	struct TIMESPEC prevts, delay;
 	atomic_t count;
 	int target_channel;
 };
@@ -119,14 +128,18 @@ struct dio_device {
 };
 
 /* Instead of timespec_sub, just subtract the nanos */
-static inline void wrn_ts_sub(struct timespec *ts, int nano)
+static inline void wrn_ts_sub(struct TIMESPEC *ts, int nano)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	set_normalized_timespec64(ts, ts->tv_sec, ts->tv_nsec - nano);
+#else
 	set_normalized_timespec(ts, ts->tv_sec, ts->tv_nsec - nano);
+#endif
 }
 
 /* This programs a new pulse without changing the width */
 static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
-			    struct timespec *ts)
+			    struct TIMESPEC *ts)
 {
 	struct DIO_WB __iomem *dio = drvdata->wrdio_base;
 	void __iomem *base = dio;
@@ -151,7 +164,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	struct dio_device *d = drvdata->mezzanine_data;
 	struct dio_channel *c;
 	struct regmap *map;
-	struct timespec *ts;
+	struct TIMESPEC *ts;
 	uint32_t reg;
 	int ch;
 
@@ -174,7 +187,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 		return 0;
 	}
 
-	/* if relative, add current 40-bit second to timespec */
+	/* if relative, add current 40-bit second to TIMESPEC */
 	if (cmd->flags & WR_DIO_F_REL) {
 		uint32_t h1, l, h2;
 		unsigned long now;
@@ -209,7 +222,7 @@ static int wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata,
 {
 	struct dio_device *d = drvdata->mezzanine_data;
 	struct dio_channel *c = 0;
-	struct timespec *ts = cmd->t;
+	struct TIMESPEC *ts = cmd->t;
 	struct regmap *map;
 	int mask, ch, last;
 	int nstamp = 0;
@@ -336,6 +349,7 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 	ktime_t t, t0;
 	int ret;
 
+	printk(KERN_INFO "Ron - start strong wrn_mezzanine_ioctl\n");
 	if (ioctlcmd == PRIV_MEZZANINE_ID)
 		return -EAGAIN; /* Special marker */
 	if (ioctlcmd != PRIV_MEZZANINE_CMD)
@@ -385,15 +399,15 @@ out:
 
 /* This is called from the interrupt handler to program a new pulse */
 static void wrn_trig_next_pulse(struct wrn_drvdata *drvdata,int ch,
-				struct dio_channel *c, struct timespec *ts)
+				struct dio_channel *c, struct TIMESPEC *ts)
 {
-	struct timespec newts;
+	struct TIMESPEC newts;
 
 	if (c->target_channel == ch) {
-		c->prevts = timespec_add(c->prevts, c->delay); 
+		c->prevts =  TIMESPEC_ADD(c->prevts, c->delay); 
 		newts = c->prevts;
 	} else {
-		newts = timespec_add(*ts, c->delay);
+		newts = TIMESPEC_ADD(*ts, c->delay);
 	}
 	__wrn_new_pulse(drvdata, c->target_channel, &newts);
 
@@ -413,7 +427,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 	static ktime_t t_ini, t_end;
 	static int rate_avg;
 	struct dio_channel *c;
-	struct timespec *ts;
+	struct TIMESPEC *ts;
 	struct regmap *map;
 	uint32_t mask, reg;
 	int ch, chm;
@@ -499,6 +513,7 @@ int wrn_mezzanine_init(struct net_device *dev)
 	struct dio_device *d;
 	int i;
 
+	printk(KERN_INFO "Ron - strong %s\n",__func__);
 	/* Allocate the data structure and enable interrupts for stamping */
 	d = kzalloc(sizeof(*d), GFP_KERNEL);
 	if (!d)
