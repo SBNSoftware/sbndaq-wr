@@ -11,12 +11,25 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
+#include <linux/gpio/driver.h>  // Needed for gpiochip_get_dev()
 #include <linux/fmc.h>
+#include <linux/version.h>
 #include "spec-nic.h"
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+static inline struct device *gpiochip_get_dev(struct gpio_chip *gc)
+{
+	return gc->parent;
+}
+#endif
 
 static inline struct fmc_device *gc_to_fmc(struct gpio_chip *gc)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	struct device *dev = gpiochip_get_dev(gc);
+#else
 	struct device *dev = gc->dev;
+#endif
 	return container_of(dev, struct fmc_device, dev);
 }
 
@@ -71,7 +84,11 @@ int wrn_gpio_init(struct fmc_device *fmc)
 	if (!gc)
 		return -ENOMEM;
 	*gc = wrn_gpio_template;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	gc->parent = &fmc->dev;
+#else
 	gc->dev = &fmc->dev;
+#endif
 
 	ret = gpiochip_add(gc);
 	if (ret < 0)
@@ -88,13 +105,15 @@ out_free:
 
 void wrn_gpio_exit(struct fmc_device *fmc)
 {
-	int ret;
-
 	struct wrn_drvdata *dd = fmc_get_drvdata(fmc);
 	struct gpio_chip *gc = dd->gc;
-	ret = gpiochip_remove(gc);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
+	gpiochip_remove(gc);
+#else
+	int ret = gpiochip_remove(gc);
 	if (ret)
 		dev_err(fmc->hwdev, "DANGER %i! gpio chip can't be removed\n",
 			ret);
+#endif
 	return;
 }

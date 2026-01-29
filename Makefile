@@ -9,7 +9,7 @@ SPEC_RELEASE=$(shell grep 'Release:' spec.spec | cut -d ' ' -f 2)
 default:
 	cd wr-starting-kit; make
 	tar cvf spec.tar \
-		etc/spec \
+		etc/spec.service \
 		wr-starting-kit/firmware/spec-init.bin \
 		wr-starting-kit/firmware/spec_sbnd.bin \
 		wr-starting-kit/firmware/wr_nic_dio.bin \

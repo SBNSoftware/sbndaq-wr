@@ -141,7 +141,7 @@ static void ff_work_fn(struct work_struct *work)
 
 	ff = ff_dev_create();
 	if (IS_ERR(ff)) {
-		pr_warning("%s: can't re-create FMC devices\n", __func__);
+		pr_warn("%s: can't re-create FMC devices\n", __func__);
 		return;
 	}
 	ret = fmc_device_register_n(ff->fmc, ff_nr_dev);
