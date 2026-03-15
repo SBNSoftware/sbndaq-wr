@@ -160,7 +160,7 @@ public:
 
 status_t Echo::read (address_t address, width_t width, data_t* data) {
   if (loud)
-    printf("recvd read  to %016"EB_ADDR_FMT"(bus): ", address);
+    printf("recvd read  to %016" EB_ADDR_FMT "(bus): ", address);
 
   if (expect.empty()) die("unexpected read", EB_FAIL);
   Record r = expect.front();
@@ -174,14 +174,14 @@ status_t Echo::read (address_t address, width_t width, data_t* data) {
   *data = r.data;
   
   if (loud)
-    printf("%016"EB_DATA_FMT": %s\n", *data, r.error?"fault":"ok");
+    printf("%016" EB_DATA_FMT ": %s\n", *data, r.error?"fault":"ok");
 
   return r.error?EB_FAIL:EB_OK;
 }
 
 status_t Echo::write(address_t address, width_t width, data_t  data) {
   if (loud)
-    printf("recvd write to %016"EB_ADDR_FMT"(bus): %016"EB_DATA_FMT": ", address, data);
+    printf("recvd write to %016" EB_ADDR_FMT "(bus): %016" EB_DATA_FMT ": ", address, data);
 
   if (expect.empty()) die("unexpected write", EB_FAIL);
   Record r = expect.front();
@@ -227,7 +227,7 @@ void TestCycle::complete(Device dev, Operation op, status_t status) {
     if (op.is_null()) die("unexpected null op", EB_FAIL);
     
     if (loud)
-      printf("reply %s to %016"EB_ADDR_FMT"(%s): %016"EB_DATA_FMT": %s\n", 
+      printf("reply %s to %016" EB_ADDR_FMT "(%s): %016" EB_DATA_FMT ": %s\n", 
         op.is_read() ? "read ":"write",
         op.address(),
         op.is_config() ? "cfg" : "bus",
@@ -280,7 +280,7 @@ void TestCycle::launch(Device device, int length, int* success_) {
     }
 
     if (loud)
-      printf("query %s to %016"EB_ADDR_FMT"(%s): %016"EB_DATA_FMT"\n", 
+      printf("query %s to %016" EB_ADDR_FMT "(%s): %016" EB_DATA_FMT "\n", 
         (r.type == READ_BUS || r.type == READ_CFG) ? "read ":"write",
         r.address,
         (r.type == READ_CFG || r.type == WRITE_CFG) ? "cfg" : "bus",

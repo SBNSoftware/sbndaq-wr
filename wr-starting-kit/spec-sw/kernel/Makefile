@@ -5,10 +5,21 @@ FMC_DRV ?= $(shell ../check-fmc-bus)
 export FMC_DRV
 
 KBUILD_EXTRA_SYMBOLS := $(FMC_DRV)/Module.symvers
+# Env Var TRACE_INC and  points to include dir where trace package cmake .. -DCMAKE_INSTALL_PREFIX=
+ifdef TRACE_SYMVERS
+ifneq ($(strip $(TRACE_SYMVERS)),)
+EXTRA_CFLAGS=-I$(TRACE_INC) -DDO_TRACE
+KBUILD_EXTRA_SYMBOLS += $(TRACE_SYMVERS)
+else
+$(warning WARNING env.var TRACE_SYMVERS not set; EXTRA_CFLAGS will be empty and KBUILD_EXTRA_SYMBOLS not added to)
+endif
+else
+$(warning WARNING env.var TRACE_SYMVERS not set; EXTRA_CFLAGS will be empty and KBUILD_EXTRA_SYMBOLS not added to)
+endif
 
 GIT_VERSION = $(shell cd $(src); git describe --dirty --long --tags)
 
-ccflags-y += -I$M/include -I$(FMC_DRV)/include
+ccflags-y += -I$M/include -I$(FMC_DRV)/include $(EXTRA_CFLAGS)
 ccflags-y += $(WR_NIC_CFLAGS)
 ccflags-y += -DGIT_VERSION=\"$(GIT_VERSION)\"
 

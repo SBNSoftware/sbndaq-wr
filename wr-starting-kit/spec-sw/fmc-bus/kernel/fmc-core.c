@@ -45,6 +45,7 @@ static int fmc_probe(struct device *dev)
 	return fdrv->probe(fdev);
 }
 
+#if 0 /* currently not used */
 static int  fmc_remove(struct device *dev)
 {
 	struct fmc_driver *fdrv = to_fmc_driver(dev->driver);
@@ -52,6 +53,7 @@ static int  fmc_remove(struct device *dev)
 
 	return fdrv->remove(fdev);
 }
+#endif
 
 static void fmc_shutdown(struct device *dev)
 {

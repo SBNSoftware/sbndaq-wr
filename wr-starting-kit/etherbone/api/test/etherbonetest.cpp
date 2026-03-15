@@ -36,7 +36,7 @@ void print_errors(Terror_data* err_data, int err_cnt){
 
 	index = 1;
 	while (index <= err_cnt){
-		printf("Compare error ! Address : %"EB_ADDR_FMT"  write:%"EB_DATA_FMT" <--> read:%"EB_DATA_FMT"\n",
+		printf("Compare error ! Address : %" EB_ADDR_FMT "  write:%" EB_DATA_FMT " <--> read:%" EB_DATA_FMT "\n",
 				err_data[index].adress, err_data[index].wr_data, err_data[index].rd_data);
 		index++;
 	};
@@ -52,8 +52,8 @@ void print_settings(Teth_settings& local_settings){
 	printf("\nParameter :\n");
 	printf("-------------\n");
 
-	printf("Address      : %"EB_ADDR_FMT"\n", local_settings.address);
-	printf("Address range: %"EB_ADDR_FMT"\n", local_settings.address_range);
+	printf("Address      : %" EB_ADDR_FMT "\n", local_settings.address);
+	printf("Address range: %" EB_ADDR_FMT "\n", local_settings.address_range);
 	printf("Netaddress   : %s\n", local_settings.netaddress);
 
 	printf("Address width: ");

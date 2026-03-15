@@ -18,6 +18,12 @@
 #include "wr-dio.h"
 #include "wr_nic/wr-nic.h"
 #include "wbgen-regs/vic-regs.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+# warning "DO_TRACE not defined -- TRACE macro disabled"
+#endif
 
 /*
  * nic-device.c defines a platform driver. We need to allocate
@@ -53,6 +59,7 @@ irqreturn_t wrn_handler(int irq, void *dev_id)
 		/* too early, just do nothing */
 		dev_info(fmc->hwdev, "early irq %i, ignoring\n", irq);
 		fmc->op->irq_ack(fmc);
+		TRACE(TLVL_WARN, "Too early, Just do nothing.");
 		return ret;
 	}
 
@@ -84,17 +91,24 @@ irqreturn_t wrn_handler(int irq, void *dev_id)
 	/* read pending vector address - the index of currently pending IRQ. */
 	vector = readl(&vic->VAR);
 
-	if (vector == WRN_VIC_ID_NIC)
+	if (vector == WRN_VIC_ID_NIC) {
+		TRACE(TLVL_DEBUG+1,"wrn_interrtup");
 		ret = wrn_interrupt(irq, drvdata->wrn);
-	else if (vector == WRN_VIC_ID_TXTSU)
+	}
+	else if (vector == WRN_VIC_ID_TXTSU) {
+		TRACE(TLVL_DEBUG+1,"wrn_tstamp_interrtup");
 		ret = wrn_tstamp_interrupt(irq, drvdata->wrn);
-	else if (vector == WRN_VIC_ID_DIO)
+	}
+	else if (vector == WRN_VIC_ID_DIO) {
+		TRACE(TLVL_DEBUG+1,"wrn_dio_interrtup");
 		ret = wrn_dio_interrupt(fmc /* different arg! */);
+	}
 
 	fmc->op->irq_ack(fmc);
 
 	writel(0, &vic->EOIR);
 
+	TRACE(TLVL_DEBUG+1,"wrn_dio_interrtup");
 	return ret;
 }
 

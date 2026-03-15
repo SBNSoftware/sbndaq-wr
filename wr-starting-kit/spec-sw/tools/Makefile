@@ -1,5 +1,15 @@
 
-CFLAGS = -ggdb -Wall -I../kernel
+ifdef TRACE_INC
+ifneq ($(strip $(TRACE_INC)),)
+EXTRA_CFLAGS=-I$(TRACE_INC) -DDO_TRACE
+else
+$(warning WARNING env.var TRACE_INC not set; EXTRA_CFLAGS will be empty)
+endif
+else
+$(warning WARNING env.var TRACE_INC not set; EXTRA_CFLAGS will be empty)
+endif
+
+CFLAGS = -ggdb -Wall -I../kernel $(EXTRA_CFLAGS)
 LDFLAGS = -L. -lspec
 
 LIB = libspec.a

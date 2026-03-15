@@ -22,6 +22,11 @@
 
 #include "wr_nic/wr-nic.h"
 #include "wr-dio.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+#endif
 
 char *prgname;
 char c;
@@ -29,7 +34,7 @@ int sock;
 char *ifname;
 struct ifreq ifr;
 
-struct wr_dio_cmd _cmd;
+struct wr_dio_cmd _cmd;         /* defined in kernel/wr-dio.h */
 struct wr_dio_cmd *cmd = &_cmd;
 
 static int parse_ts(char *s, struct timespec *ts)
@@ -177,28 +182,34 @@ static int scan_stamp(int argc, char **argv, int ismask)
 				argv[0]);
 		return -1;
 	}
-	if (ismask)
+	if (ismask) {
 		cmd->flags = WR_DIO_F_MASK;
+	}
 
 	while (1) {
 		cmd->channel = ch;
-		fprintf(stderr,"%s: in scan_stamp: Ron - in while loop ch == %i \n", prgname, ch );
+		TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - in while loop ch == %i \n", prgname, ch );
 		errno = 0;
 		ifr.ifr_data = (void *)cmd;
-                /*fprintf(stderr,"%s: in scan_stamp: Ron - before ioctl PRIV_MEZZANINE_CMD\n", prgname );*/
+		TRACE(TLVL_DEBUG,
+		      "%s: in scan_stamp: Ron - before ioctl(sock,PRIV_MEZZANINE_CMD,&ifr) w/ifr_data=cmd w/->command=%u"
+		      , prgname, cmd->command );
 		if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0 ) {
 			if (errno == EAGAIN)
 				break;
-				fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): NOT EAGAIN status ",
-				"%s\n", prgname, ifname, strerror(errno));
-		return -1;
+			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): NOT EAGAIN status "
+			        "%s\n", prgname, ifname, strerror(errno));
+			return -1;
 		}
-		fprintf(stderr,"%s: in scan_stamp: Ron - should loop over nstamp data %i \n", prgname, cmd->nstamp );
-		for (i = 0; i < cmd->nstamp; i++)
+		TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - should loop over nstamp data %i \n", prgname, cmd->nstamp );
+		for (i = 0; i < cmd->nstamp; i++) {
+			TRACE(TLVL_DEBUG+9,"ch %i, %9li.%09li\n", cmd->channel,
+			       (long)cmd->t[i].tv_sec, cmd->t[i].tv_nsec);
 			printf("ch %i, %9li.%09li\n", cmd->channel,
 			       (long)cmd->t[i].tv_sec, cmd->t[i].tv_nsec);
+		}
 	}
-	fprintf(stderr,"%s: in scan_stamp: Ron - exit and return 0 \n", prgname );
+	TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - exit and return 0 \n", prgname );
 	return 0;
 }
 
@@ -336,7 +347,7 @@ int main(int argc, char **argv)
 
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	fprintf(stderr,"%s: in main: Ron - before ioctl PRIV_MEZZANINE_ID\n", prgname );
+	TRACE(TLVL_LOG,"%s: in main: Ron - before ioctl PRIV_MEZZANINE_ID\n", prgname );
 	if (ioctl(sock, PRIV_MEZZANINE_ID, &ifr) < 0
 	    /* EAGAIN is special: it means we have no ID to check yet */
 		&& errno != EAGAIN) {

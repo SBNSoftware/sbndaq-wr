@@ -15,6 +15,12 @@
 #include <linux/version.h>
 
 #include "wr-nic.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+# warning "DO_TRACE not defined -- TRACE macro disabled"
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
 # define TIMESPEC          timespec64
@@ -107,8 +113,10 @@ irqreturn_t wrn_tstamp_interrupt(int irq, void *dev_id)
 	struct TXTSU_WB *regs = wrn->txtsu_regs;
 	u32 r0, r1, r2;
 
-	if (!regs)
+	if (!regs) {
+		TRACE(TLVL_DEBUG+2,"!regs - early? return IRQ_NONE");
 		return IRQ_NONE; /* early interrupt? */
+	}
 
 	/* printk("%s: %i\n", __func__, __LINE__); */
 	/* FIXME: locking */
@@ -116,6 +124,7 @@ irqreturn_t wrn_tstamp_interrupt(int irq, void *dev_id)
 	r1 = readl(&regs->TSF_R1);
 	r2 = readl(&regs->TSF_R2);
 
+	TRACE(TLVL_DEBUG+3, "Call record_tstamp(wrn=%p,r0=%u,r0=%u,r0=%u",wrn,r0,r1,r2);
 	record_tstamp(wrn, r0, r1, r2);
 	writel(TXTSU_EIC_IER_NEMPTY, &wrn->txtsu_regs->EIC_ISR); /* ack irq */
 	return IRQ_HANDLED;
