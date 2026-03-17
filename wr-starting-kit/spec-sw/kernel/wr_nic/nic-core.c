@@ -22,6 +22,11 @@
 
 #include "wr-nic.h"
 #include "nic-mem.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
 # define TIMESPEC          timespec64
@@ -242,7 +247,7 @@ struct net_device_stats *wrn_get_stats(struct net_device *dev)
 int __weak wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 			       int cmd)
 {
-	printk(KERN_INFO "Ron - in weak wrn_mezzanine_ioctl\n");
+	TRACE(TLVL_DEBUG+2, "Ron - in weak wrn_mezzanine_ioctl");
 	return -ENOIOCTLCMD;
 }
 
@@ -296,7 +301,8 @@ static int wrn_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	case PRIV_MEZZANINE_ID:
 	case PRIV_MEZZANINE_CMD:
-		/* Pass this to the mezzanine driver, or use internal weak */
+		TRACE(TLVL_DEBUG+2,"PRIV_MEZZANINE_CMD or PRIV_MEZZANINE_ID - "
+		      "Pass this to the mezzanine driver, or use internal weak");
 		return wrn_mezzanine_ioctl(dev, rq, cmd);
 
 	default:

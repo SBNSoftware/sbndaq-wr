@@ -25,6 +25,11 @@
 
 #include "wr_nic/wr-nic.h"
 #include "wr-dio.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+#endif
 
 #define RULER_PROTO 0x5752 /* WR */
 
@@ -127,8 +132,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (0)
-			printf("command %i, ch %i, t %li.%09li\n",
+		TRACE(TLVL_DEBUG+1,"command %i, ch %i, t %li.%09li\n",
 			       f.cmd.command, f.cmd.channel, f.cmd.t[0].tv_sec,
 			       f.cmd.t[0].tv_nsec);
 

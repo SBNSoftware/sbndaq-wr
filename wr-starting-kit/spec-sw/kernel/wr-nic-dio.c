@@ -22,6 +22,11 @@
 #include "wr_nic/wr-nic.h"
 #include "wr-dio.h"
 #include "wbgen-regs/vic-regs.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+#endif
 
 #ifdef DIO_STAT
 #define wrn_stat 1
@@ -144,6 +149,7 @@ static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
 	struct DIO_WB __iomem *dio = drvdata->wrdio_base;
 	void __iomem *base = dio;
 	struct regmap *map;
+	TRACE(TLVL_DEBUG+15,"__wrn_new_pulse(drvdata,%d,%lld.%09ld) START",ch,ts->tv_sec,ts->tv_nsec);
 
 	map = regmap + ch;
 
@@ -153,7 +159,8 @@ static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
 	writel(ts->tv_sec, base + map->trig_l);
 
 	writel(1 << ch, &dio->R_LATCH);
-}
+	TRACE(TLVL_DEBUG+15,"__wrn_new_pulse(drvdata,%d,%lld.%09ld) DONE/RETURN",ch,ts->tv_sec,ts->tv_nsec);
+}	// __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch, struct TIMESPEC *ts)
 
 static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 			   struct wr_dio_cmd *cmd)
@@ -169,8 +176,11 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	int ch;
 
 	ch = cmd->channel;
-	if (ch > 4)
+	TRACE(TLVL_DEBUG+10,"ch=%d",ch);
+	if (ch > 4) {
+		TRACE(TLVL_ERROR,"return -EINVAL - invalid channel");
 		return -EINVAL; /* mask not supported */
+	}
 	c = d->ch + ch;
 	map = regmap + ch;
 	ts = cmd->t;
@@ -183,6 +193,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 
 	if (cmd->flags & WR_DIO_F_NOW) {
 		/* if "now" we are done */
+		TRACE(TLVL_DEBUG+10,"cmd->flags&WR_DIO_F_NOW == true -- return 0");
 		writel(1 << ch, &dio->PULSE);
 		return 0;
 	}
@@ -213,25 +224,33 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 		c->delay = ts[2];
 	}
 
+	TRACE(TLVL_DEBUG+10,"calling __wrn_new_pulse(drvdata, %d, %lld.%09ld)",
+	      ch, ts->tv_sec, ts->tv_nsec);
 	__wrn_new_pulse(drvdata, ch, ts);
+	TRACE(TLVL_DEBUG+10,"Done, return 0");
 	return 0;
-}
+}	// wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
 static int wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata,
 			     struct wr_dio_cmd *cmd)
 {
 	struct dio_device *d = drvdata->mezzanine_data;
-	struct dio_channel *c = 0;
+	struct dio_channel *dioChan_p = 0;
 	struct TIMESPEC *ts = cmd->t;
 	struct regmap *map;
 	int mask, ch, last;
 	int nstamp = 0;
 
+	TRACE(TLVL_DEBUG+12,"START - WRN_DIO_BUFFER_LEN=%d WR_DIO_N_STAMP=%d",
+	      WRN_DIO_BUFFER_LEN, WR_DIO_N_STAMP);
 	if ((cmd->flags & (WR_DIO_F_MASK || WR_DIO_F_WAIT))
-	    == (WR_DIO_F_MASK || WR_DIO_F_WAIT))
+	    == (WR_DIO_F_MASK || WR_DIO_F_WAIT)) {
+		TRACE(TLVL_ERROR,"Invalid cmd->flags - return -EINVAL");
 		return -EINVAL; /* wait on several channels not supported */
+	}
 
 again:
+	TRACE(TLVL_DEBUG+12,"START/again");
 	if (cmd->flags & WR_DIO_F_MASK) {
 		ch = 0;
 		last = 4;
@@ -242,18 +261,25 @@ again:
 		mask = (1 << ch);
 	}
 	/* handle the 1-channel and mask case in the same loop */
-	c = d->ch + ch;
-	for (; ch <= last; ch++, c++) {
-		if (((1 << ch) & mask) == 0)
+	dioChan_p = d->ch + ch;
+	TRACE(TLVL_DEBUG+12,"before loop - ch=%d, last=%d, mask=0x%x",ch,last,mask);
+	for (; ch <= last; ch++, dioChan_p++) {
+		if (((1 << ch) & mask) == 0) {
+			TRACE(TLVL_DEBUG+12,"ch=%d, mask=0x%x - continue", ch, mask );
 			continue;
+		}
 		map = regmap + ch;
 		while (1) {
-			if (nstamp == WR_DIO_N_STAMP)
+			if (nstamp == WR_DIO_N_STAMP) {
+				TRACE(TLVL_DEBUG+12,"nstamp==WR_DIO_N_STAMP==%d - break",nstamp);
 				break;
-			if (c->bhead == c->btail)
+			}
+			if (dioChan_p->bhead == dioChan_p->btail) {
+				TRACE(TLVL_DEBUG+12,"dioChan_p->bhead==dioChan_p->btail empty? - break");
 				break;
-			*ts = c->tsbuf[c->btail];
-			c->btail = (c->btail + 1) % WRN_DIO_BUFFER_LEN;
+			}
+			*ts = dioChan_p->tsbuf[dioChan_p->btail];
+			dioChan_p->btail = (dioChan_p->btail + 1) % WRN_DIO_BUFFER_LEN;
 			nstamp++;
 			ts++;
 		}
@@ -263,29 +289,38 @@ again:
 		}
 	}
 	cmd->nstamp = nstamp;
+	TRACE(TLVL_DEBUG+12,"cmd->nstamp = nstamp");
 
 	/* The user may asketo wait for timestamps, but for 1 channel only */
 	if (!nstamp && cmd->flags & WR_DIO_F_WAIT) {
-		ch--; c--; /* The for above incremeted them */
+		ch--; dioChan_p--; /* The for above incremeted them */
 		/*
 		 * HACK: since 2.1.68 (Nov 1997) the ioctl is called locked.
 		 * So we need to unlock, but that is dangerous for rmmod.
 		 * Let's thus increase the module usage while sleeping
 		 */
+		TRACE(TLVL_DEBUG+12,"before wait_event_interruptible");
 		try_module_get(THIS_MODULE);
 		rtnl_unlock();
-		wait_event_interruptible(c->q, c->bhead != c->btail);
+		wait_event_interruptible(dioChan_p->q, dioChan_p->bhead != dioChan_p->btail);
 		rtnl_lock();
 		module_put(THIS_MODULE);
-		if (signal_pending(current))
+		TRACE(TLVL_DEBUG+12,"after wait_event_interruptible");
+		if (signal_pending(current)) {
+			TRACE(TLVL_DEBUG+12,"signal_pending(current) - return -ERESTARTSYS");
 			return -ERESTARTSYS;
+		}
+		TRACE(TLVL_DEBUG+12,"before goto again");
 		goto again;
 	}
 
-	if (!nstamp)
+	if (!nstamp) {
+		TRACE(TLVL_DEBUG+12,"nstamp==0 return -EAGAIN");
 		return -EAGAIN;
+	}
+	TRACE(TLVL_DEBUG+12,"return 0");
 	return 0;
-}
+}	// wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
 static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 			     struct wr_dio_cmd *cmd)
@@ -349,11 +384,15 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 	ktime_t t, t0;
 	int ret;
 
-	printk(KERN_INFO "Ron - start strong wrn_mezzanine_ioctl\n");
-	if (ioctlcmd == PRIV_MEZZANINE_ID)
+	TRACE(TLVL_DEBUG+2, "Ron - start strong wrn_mezzanine_ioctl wrn_stat=%d",wrn_stat);
+	if (ioctlcmd == PRIV_MEZZANINE_ID) {
+		TRACE(TLVL_DEBUG+2, "ioctlcmd==PRIV_MEZZANINE_ID - return -EAGAIN");
 		return -EAGAIN; /* Special marker */
-	if (ioctlcmd != PRIV_MEZZANINE_CMD)
+	}
+	if (ioctlcmd != PRIV_MEZZANINE_CMD) {
+		TRACE(TLVL_ERROR, "ioctlcmd!=PRIV_MEZZANINE_CMD - return -ENOIOCTLCMD");
 		return -ENOIOCTLCMD;
+	}
 
 	if (wrn_stat) {
 		t0 = ktime_get();
@@ -361,26 +400,35 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 
 	/* The cmd struct can't fit in the stack, so allocate it */
 	cmd = kmalloc(sizeof(*cmd), GFP_KERNEL);
-	if (!cmd)
+	if (!cmd) {
+		TRACE(TLVL_ERROR, "return -ENOMEM");
 		return -ENOMEM;
+	}
 	ret = -EFAULT;
-	if (copy_from_user(cmd, rq->ifr_data, sizeof(*cmd)))
+	if (copy_from_user(cmd, rq->ifr_data, sizeof(*cmd))) {
+		TRACE(TLVL_ERROR, "copy_from_user returned non-zero - goto out");
 		goto out;
+	}
 
 	switch(cmd->command) {
 	case WR_DIO_CMD_PULSE:
+		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_PULSE");
 		ret = wrn_dio_cmd_pulse(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_STAMP:
+		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_STAMP");
 		ret = wrn_dio_cmd_stamp(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_INOUT:
+		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_INOUT");
 		ret = wrn_dio_cmd_inout(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_DAC:
+		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_DAC");
 		ret = -ENOTSUPP;
 		goto out;
 	default:
+		TRACE(TLVL_DEBUG+3,"cmd->command case default/EINVAL");
 		ret = -EINVAL;
 		goto out;
 	}

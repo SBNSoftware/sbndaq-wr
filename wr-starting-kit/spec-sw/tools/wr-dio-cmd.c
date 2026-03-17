@@ -347,7 +347,9 @@ int main(int argc, char **argv)
 
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	TRACE(TLVL_LOG,"%s: in main: Ron - before ioctl PRIV_MEZZANINE_ID\n", prgname );
+	TRACE(TLVL_LOG,
+	      TSPRINTF("%s %s %s: in main: Ron - before ioctl PRIV_MEZZANINE_ID"
+		           , prgname, ifname, argv[0]) );
 	if (ioctl(sock, PRIV_MEZZANINE_ID, &ifr) < 0
 	    /* EAGAIN is special: it means we have no ID to check yet */
 		&& errno != EAGAIN) {

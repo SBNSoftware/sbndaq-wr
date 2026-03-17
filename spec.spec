@@ -90,8 +90,8 @@ ln -sf /lib/modules/%{_kernel_release}/extra/fmc-write-eeprom.ko   /lib/modules/
 ln -sf /lib/modules/%{_kernel_release}/extra/spec.ko               /lib/modules/%{_kernel_release}/weak-updates/
 ln -sf /lib/modules/%{_kernel_release}/extra/wr-nic.ko             /lib/modules/%{_kernel_release}/weak-updates/
 
-# Enable and reload systemd unit
-%systemd_post spec.service
+## Enable and reload systemd unit
+#%systemd_post spec.service
 
 # Setuid on tools
 chmod +s /usr/bin/spec-cl
@@ -105,8 +105,8 @@ chmod +s /usr/bin/wr-dio-pps
 chmod +s /usr/bin/wr-dio-ruler
 
 
-%preun
-%systemd_preun spec.service
+#%preun
+#%systemd_preun spec.service
 
-%postun
-%systemd_postun_with_restart spec.service
+#%postun
+#%systemd_postun_with_restart spec.service
