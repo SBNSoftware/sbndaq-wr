@@ -345,7 +345,6 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		ch = cmd->channel;
 		last = ch;
 		mask = (1 << ch);
-		cmd->value <<= ch;
 	}
 	TRACE(TLVL_DEBUG+3,"ch=%d last=%d mask=0x%x value=0x%x"
 		      , ch, last, mask, cmd->value);	
@@ -355,8 +354,12 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		if (((1 << ch) & mask) == 0)
 			continue;
 		TRACE(TLVL_DEBUG+3,"in for, ch=%d mask=0x%x", ch, mask);
-		/* select the bits by shifting back the value field */
-		bits = cmd->value >> ch;
+		/*
+		 * In mask mode cmd->value carries channel bitmaps (0..4, 8..12,
+		 * 16..20, 24..28), so align selected channel to bit 0.
+		 * In single-channel mode cmd->value already describes one channel.
+		 */
+		bits = (cmd->flags & WR_DIO_F_MASK) ? (cmd->value >> ch) : cmd->value;
 
 		/* Obtain the current value in iomode */
 		
