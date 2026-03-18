@@ -367,12 +367,16 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 
 		/* Select IO mode */
 		if (bits & WR_DIO_INOUT_DIO) {
-			if(bits & WR_DIO_INOUT_VALUE)
+			if(bits & WR_DIO_INOUT_VALUE) {
 				iomode = 2; /* WRPC connection */
-			else
+				TRACE(TLVL_DEBUG+3,"WRPC connection for ch=%d",ch);
+			} else {
 				iomode = 1; /* DIO connection */
+				TRACE(TLVL_DEBUG+3,"DIO connection for ch=%d",ch);
+			}
 		} else {
 			iomode = 0; /* GPIO  connection */
+			TRACE(TLVL_DEBUG+3,"GPIO connection for ch=%d",ch);
 
 			/* Output value is bit 0 (0x1) */
 			if (bits & WR_DIO_INOUT_VALUE)
