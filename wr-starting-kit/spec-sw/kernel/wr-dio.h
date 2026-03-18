@@ -70,6 +70,26 @@ enum wr_dio_cmd_name {
 #define WR_DIO_INOUT_OUTPUT	(1 << 16)
 #define WR_DIO_INOUT_TERM	(1 << 24)
 
+/* IOMODE register helpers: one 4-bit nibble per channel */
+#define WR_DIO_IOMODE_CH_BITS		4
+#define WR_DIO_IOMODE_CH_SHIFT(ch)	((ch) * WR_DIO_IOMODE_CH_BITS)
+#define WR_DIO_IOMODE_CH_MASK(ch)	(0xFu << WR_DIO_IOMODE_CH_SHIFT(ch))
+
+/* Per-channel nibble layout */
+#define WR_DIO_IOMODE_SRC_MASK		0x3u
+#define WR_DIO_IOMODE_OUTPUT_ENABLE_N	(1u << 2)
+#define WR_DIO_IOMODE_TERM_ENABLE	(1u << 3)
+
+/* Source select values for nibble bits [1:0] */
+#define WR_DIO_IOMODE_SRC_GPIO		0u
+#define WR_DIO_IOMODE_SRC_DIO		1u
+#define WR_DIO_IOMODE_SRC_WRPC		2u
+
+#define WR_DIO_IOMODE_CH_SRC_MASK(ch)		(WR_DIO_IOMODE_SRC_MASK << WR_DIO_IOMODE_CH_SHIFT(ch))
+#define WR_DIO_IOMODE_CH_SOURCE(ch, src)	((((uint32_t)(src)) & WR_DIO_IOMODE_SRC_MASK) << WR_DIO_IOMODE_CH_SHIFT(ch))
+#define WR_DIO_IOMODE_CH_ENCODE(ch, nibble)	((((uint32_t)(nibble)) & 0xFu) << WR_DIO_IOMODE_CH_SHIFT(ch))
+#define WR_DIO_IOMODE_CH_DECODE(reg, ch)	((((uint32_t)(reg)) >> WR_DIO_IOMODE_CH_SHIFT(ch)) & 0xFu)
+
 #define WR_DIO_N_STAMP  16 /* At least 5 * 3 */
 
 struct wr_dio_cmd {
