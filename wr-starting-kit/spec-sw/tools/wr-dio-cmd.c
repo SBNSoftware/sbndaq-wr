@@ -17,7 +17,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
-#include <net/if.h>
+#include <net/if.h>				/* struct ifreq (via nesting) */
 #include <netpacket/packet.h>
 
 #include "wr_nic/wr-nic.h"
@@ -32,7 +32,7 @@ char *prgname;
 char c;
 int sock;
 char *ifname;
-struct ifreq ifr;
+struct ifreq ifr;				/*  */
 
 struct wr_dio_cmd _cmd;         /* defined in kernel/wr-dio.h */
 struct wr_dio_cmd *cmd = &_cmd;
@@ -188,20 +188,22 @@ static int scan_stamp(int argc, char **argv, int ismask)
 
 	while (1) {
 		cmd->channel = ch;
-		TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - in while loop ch == %i \n", prgname, ch );
+		TRACE(TLVL_DEBUG+1,"%s: in scan_stamp: Ron - in while loop ch == %i \n", prgname, ch );
 		errno = 0;
 		ifr.ifr_data = (void *)cmd;
-		TRACE(TLVL_DEBUG,
+		TRACE(TLVL_DEBUG+1,
 		      "%s: in scan_stamp: Ron - before ioctl(sock,PRIV_MEZZANINE_CMD,&ifr) w/ifr_data=cmd w/->command=%u"
 		      , prgname, cmd->command );
 		if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0 ) {
-			if (errno == EAGAIN)
+			if (errno == EAGAIN) {
+				TRACE(TLVL_DEBUG+1,"EAGAIN - normal done/return");
 				break;
+			}
 			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): NOT EAGAIN status "
 			        "%s\n", prgname, ifname, strerror(errno));
 			return -1;
 		}
-		TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - should loop over nstamp data %i \n", prgname, cmd->nstamp );
+		TRACE(TLVL_DEBUG+1,"%s: in scan_stamp: Ron - should loop over nstamp data %i \n", prgname, cmd->nstamp );
 		for (i = 0; i < cmd->nstamp; i++) {
 			TRACE(TLVL_DEBUG+9,"ch %i, %9li.%09li\n", cmd->channel,
 			       (long)cmd->t[i].tv_sec, cmd->t[i].tv_nsec);
@@ -209,58 +211,60 @@ static int scan_stamp(int argc, char **argv, int ismask)
 			       (long)cmd->t[i].tv_sec, cmd->t[i].tv_nsec);
 		}
 	}
-	TRACE(TLVL_DEBUG,"%s: in scan_stamp: Ron - exit and return 0 \n", prgname );
+	TRACE(TLVL_DEBUG+1,"%s: in scan_stamp: Ron - exit and return 0 \n", prgname );
 	return 0;
-}
+}	// scan_stamp(int argc, char **argv, int ismask)
 
-static int one_mode(int c, int index)
+
+
+static int one_mode(int modeChar, int chanIdx)
 {
-	if (c == '-')
+	if (modeChar == '-')
 		return 0;
-	cmd->channel |= 1 << index;
+	cmd->channel |= 1 << chanIdx;
 
 	//Add error message for channel 0 
-	if(index==0 && strchr("dD01",c))
+	if(chanIdx==0 && strchr("dD01",modeChar))
 	{
 		fprintf(stderr, "Error: Only p/P modes are available as ouput mode for channel 0\n");
 		return -1;
 	}
 	
-	switch(c) {
+	switch(modeChar) {
 	case 'D':
-		cmd->value |= WR_DIO_INOUT_TERM << index;
+		cmd->value |= WR_DIO_INOUT_TERM << chanIdx;
 	case 'd':
-		cmd->value |= WR_DIO_INOUT_DIO << index;
-		cmd->value |= WR_DIO_INOUT_OUTPUT << index;
+		cmd->value |= WR_DIO_INOUT_DIO << chanIdx;
+		cmd->value |= WR_DIO_INOUT_OUTPUT << chanIdx;
 		break;
 
 	case 'C':
-		cmd->value |= WR_DIO_INOUT_TERM << index;
+		cmd->value |= WR_DIO_INOUT_TERM << chanIdx;
 	case 'c':
-		cmd->value |= WR_DIO_INOUT_DIO << index;
-		cmd->value |= WR_DIO_INOUT_VALUE << index;
-		if(index!=4)
+		cmd->value |= WR_DIO_INOUT_DIO << chanIdx;
+		cmd->value |= WR_DIO_INOUT_VALUE << chanIdx;
+		if(chanIdx!=4)
 			fprintf(stdout, "Warning: Clock mode is only available for last channel (ch4)\n,"
 			 "(on other channel it corresponds to input mode without interruptions)\n");
 		break;
 
 	case 'P':
-		cmd->value |= WR_DIO_INOUT_TERM << index;
+		cmd->value |= WR_DIO_INOUT_TERM << chanIdx;
 	case 'p':
-		cmd->value |= WR_DIO_INOUT_DIO << index;
-		cmd->value |= WR_DIO_INOUT_VALUE << index;
-		cmd->value |= WR_DIO_INOUT_OUTPUT << index;
+		cmd->value |= WR_DIO_INOUT_DIO << chanIdx;
+		cmd->value |= WR_DIO_INOUT_VALUE << chanIdx;
+		cmd->value |= WR_DIO_INOUT_OUTPUT << chanIdx;
 		break;
 
 	case 'I':
-		cmd->value |= WR_DIO_INOUT_TERM << index;
+		cmd->value |= WR_DIO_INOUT_TERM << chanIdx;
 	case 'i':
 		break;
 
 	case '1':
-		cmd->value |= WR_DIO_INOUT_VALUE << index;
+		cmd->value |= WR_DIO_INOUT_VALUE << chanIdx;
 	case '0':
-		cmd->value |= WR_DIO_INOUT_OUTPUT << index;
+		cmd->value |= WR_DIO_INOUT_OUTPUT << chanIdx;
 		break;
 
 	default:
@@ -269,7 +273,7 @@ static int one_mode(int c, int index)
 		return -1;
 	}
 	return 0;
-}
+}	// one_mode(int modeChar, int chanIdx)
 
 
 static int scan_inout(int argc, char **argv)
@@ -281,7 +285,9 @@ static int scan_inout(int argc, char **argv)
 	cmd->channel = 0;
 	cmd->value = 0;
 
+	TRACE(TLVL_DEBUG+1, "argc=%d", argc ); /* example: "mode" "1" "D" */
 	if (argc == 2) {
+		TRACE(TLVL_DEBUG+1, TSPRINTF("argc=2 argv[0]=%s argv[1]=%s", argv[0], argv[1]));
 		if (strlen(argv[1]) != 5) {
 			fprintf(stderr, "%s: %s: wrong argument \"%s\"\n",
 				prgname, argv[0], argv[1]);
@@ -297,6 +303,8 @@ static int scan_inout(int argc, char **argv)
 			return -1;
 		}
 		while (argc >= 3) {
+			TRACE(TLVL_DEBUG+1, TSPRINTF("argc=%d argv[0]=%s [1]=%s [2]=%s",
+			                             argc, argv[0],argv[1],argv[2]));
 			if (sscanf(argv[1], "%i%c", &ch, &c) != 1
 			    || ch < 0 || ch > 4) {
 				fprintf(stderr, "%s: mode: invalid channel "
@@ -308,20 +316,25 @@ static int scan_inout(int argc, char **argv)
 					"\"%s\"\n", prgname,  argv[2]);
 				return -1;
 			}
+			TRACE(TLVL_DEBUG+1, "before one_mode(%c,%d)",argv[2][0],ch);
 			if (one_mode(argv[2][0], ch) < 0)
 				return -1;
+			TRACE(TLVL_DEBUG+1,"cmd->command=%u channel(mask)=0x%x value=0x%x flags=0x%x nstamp=%u"
+			      " t[0].tv_sec=%ld t[0].tv_nsec=%ld",
+			      cmd->command, cmd->channel, cmd->value, cmd->flags, cmd->nstamp,
+			      cmd->t[0].tv_sec, cmd->t[0].tv_nsec);
 			argv += 2;
 			argc -= 2;
 		}
 	}
 	ifr.ifr_data = (void *)cmd;
-	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) {
+	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) { /* See spec-sw/kernel/wr_nic/nic-core.c:303 */
 		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
 			prgname, ifname, strerror(errno));
 			return -1;
 	}
 	return 0;
-}
+}	// scan_inout(int argc, char **argv)
 
 int main(int argc, char **argv)
 {

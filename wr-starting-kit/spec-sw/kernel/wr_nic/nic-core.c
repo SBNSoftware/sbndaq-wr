@@ -269,48 +269,59 @@ static int wrn_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	int res;
 	u32 reg;
 
-	printk(KERN_INFO "Ron - start wrn_ioctl\n");
+	TRACE(TLVL_DEBUG+1,"start wrn_ioctl");
 	switch (cmd) {
 	case SIOCSHWTSTAMP:
-		return wrn_tstamp_ioctl(dev, rq, cmd);
+		res = wrn_tstamp_ioctl(dev, rq, cmd);
+		break;
 	case PRIV_IOCGCALIBRATE:
 	case PRIV_IOCGGETPHASE:
-		return -EOPNOTSUPP;
+		res = -EOPNOTSUPP;
+		break;
 	case PRIV_IOCREADREG:
 		if (get_user(reg, (u32 *)rq->ifr_data) < 0)
-			return -EFAULT;
-		if (reg > sizeof(struct EP_WB) || reg & 3)
-			return -EINVAL;
-		reg = readl((void *)ep->ep_regs + reg);
-		if (put_user(reg, (u32 *)rq->ifr_data) < 0)
-			return -EFAULT;
-		return 0;
+			res = -EFAULT;
+		else if (reg > sizeof(struct EP_WB) || reg & 3)
+			res = -EINVAL;
+		else {
+			reg = readl((void *)ep->ep_regs + reg);
+			if (put_user(reg, (u32 *)rq->ifr_data) < 0)
+				res = -EFAULT;
+			else
+				res = 0;
+		}
+		break;
 	case PRIV_IOCPHYREG:
 		/* this command allows to read and write a phy register */
-		if (get_user(reg, (u32 *)rq->ifr_data) < 0)
-			return -EFAULT;
+		if (get_user(reg, (u32 *)rq->ifr_data) < 0) {
+			res = -EFAULT;
+			break;
+		}
 		if (reg & (1<<31)) {
 			wrn_phy_write(dev, 0, (reg >> 16) & 0xff,
 				      reg & 0xffff);
-			return 0;
+			res = 0;
+			break;
 		}
 		reg = wrn_phy_read(dev, 0, (reg >> 16) & 0xff);
 		if (put_user(reg, (u32 *)rq->ifr_data) < 0)
-			return -EFAULT;
-		return 0;
-
+			res = -EFAULT;
+		else
+			res = 0;
+		break;;
 	case PRIV_MEZZANINE_ID:
 	case PRIV_MEZZANINE_CMD:
 		TRACE(TLVL_DEBUG+2,"PRIV_MEZZANINE_CMD or PRIV_MEZZANINE_ID - "
 		      "Pass this to the mezzanine driver, or use internal weak");
-		return wrn_mezzanine_ioctl(dev, rq, cmd);
-
+		res = wrn_mezzanine_ioctl(dev, rq, cmd);
+		TRACE(TLVL_DEBUG+1,"returning %d",res);
+		break;
 	default:
 		spin_lock_irq(&ep->lock);
 		res = generic_mii_ioctl(&ep->mii, if_mii(rq), cmd, NULL);
 		spin_unlock_irq(&ep->lock);
-		return res;
 	}
+	return res;
 }
 
 

@@ -172,7 +172,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	struct dio_channel *c;
 	struct regmap *map;
 	struct TIMESPEC *ts;
-	uint32_t reg;
+	uint32_t regVal;
 	int ch;
 
 	ch = cmd->channel;
@@ -186,8 +186,9 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	ts = cmd->t;
 
 	/* First, configure this bit as DIO output */
-	reg = readl(&dio->IOMODE);
-	writel(reg | (1 << 4*ch), &dio->IOMODE);
+	regVal = readl(&dio->IOMODE);
+	TRACE(TLVL_DEBUG,"ch=%d IOMODE regVal read=0x%x write=0x%x",ch,regVal,regVal|(1<<4*ch));
+	writel(regVal | (1 << 4*ch), &dio->IOMODE);
 
 	writel(ts[1].tv_nsec / 8, base + map->pulse); /* width */
 
@@ -250,7 +251,6 @@ static int wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata,
 	}
 
 again:
-	TRACE(TLVL_DEBUG+12,"START/again");
 	if (cmd->flags & WR_DIO_F_MASK) {
 		ch = 0;
 		last = 4;
@@ -260,22 +260,26 @@ again:
 		last = ch;
 		mask = (1 << ch);
 	}
+	TRACE(TLVL_DEBUG+12,"START/again ch=%d last=%d make=0x%x nstamp=%d",ch,last,mask,nstamp);
 	/* handle the 1-channel and mask case in the same loop */
 	dioChan_p = d->ch + ch;
-	TRACE(TLVL_DEBUG+12,"before loop - ch=%d, last=%d, mask=0x%x",ch,last,mask);
 	for (; ch <= last; ch++, dioChan_p++) {
+		TRACE(TLVL_DEBUG+12,"Beginning of for loop - ch=%d, last=%d, mask=0x%x dioChan.bhead/tail=%d/%d .target_channel=%d"
+		      , ch,last, mask, dioChan_p->bhead, dioChan_p->btail, dioChan_p->target_channel );
 		if (((1 << ch) & mask) == 0) {
 			TRACE(TLVL_DEBUG+12,"ch=%d, mask=0x%x - continue", ch, mask );
 			continue;
 		}
 		map = regmap + ch;
 		while (1) {
+			TRACE(TLVL_DEBUG+12,"while(1) BEGIN - nstamp=%d",nstamp);
 			if (nstamp == WR_DIO_N_STAMP) {
 				TRACE(TLVL_DEBUG+12,"nstamp==WR_DIO_N_STAMP==%d - break",nstamp);
 				break;
 			}
 			if (dioChan_p->bhead == dioChan_p->btail) {
-				TRACE(TLVL_DEBUG+12,"dioChan_p->bhead==dioChan_p->btail empty? - break");
+				TRACE(TLVL_DEBUG+12,"nstamp=%d dioChan_p->bhead(%d)==dioChan_p->btail(%d) empty? - break"
+				      , nstamp, dioChan_p->bhead, dioChan_p->btail);
 				break;
 			}
 			*ts = dioChan_p->tsbuf[dioChan_p->btail];
@@ -284,12 +288,13 @@ again:
 			ts++;
 		}
 		if (nstamp) {
+			TRACE(TLVL_DEBUG+12,"setting cmd->channel=%d",ch);
 			cmd->channel = ch;
 			break;
 		}
 	}
 	cmd->nstamp = nstamp;
-	TRACE(TLVL_DEBUG+12,"cmd->nstamp = nstamp");
+	TRACE(TLVL_DEBUG+12,"cmd->nstamp = nstamp(%d)",nstamp);
 
 	/* The user may asketo wait for timestamps, but for 1 channel only */
 	if (!nstamp && cmd->flags & WR_DIO_F_WAIT) {
@@ -328,8 +333,10 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 	struct DIO_WB __iomem *dio = drvdata->wrdio_base;
 	struct wrn_gpio_block __iomem *gpio = drvdata->gpio_base;
 	int mask, ch, last, bits;
-	uint32_t reg, iomode;
+	uint32_t regVal, iomode;
 
+	TRACE(TLVL_DEBUG+3,"START - flags=0x%x WR_DIO_F_MASK=0x%x value=0x%x"
+	      , cmd->flags, WR_DIO_F_MASK, cmd->value);
 	if (cmd->flags & WR_DIO_F_MASK) {
 		ch = 0;
 		last = 4;
@@ -340,16 +347,23 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		mask = (1 << ch);
 		cmd->value <<= ch;
 	}
+	TRACE(TLVL_DEBUG+3,"ch=%d last=%d mask=0x%x value=0x%x"
+		      , ch, last, mask, cmd->value);	
 
 	/* handle the 1-channel and mask case in the same loop */
 	for (; ch <= last; ch++) {
 		if (((1 << ch) & mask) == 0)
 			continue;
+		TRACE(TLVL_DEBUG+3,"in for, ch=%d mask=0x%x", ch, mask);
 		/* select the bits by shifting back the value field */
 		bits = cmd->value >> ch;
 
 		/* Obtain the current value in iomode */
-		reg = readl(&dio->IOMODE) & ~(0xF << 4*ch);
+		
+		regVal  = readl(&dio->IOMODE);
+		TRACE(TLVL_DEBUG,"current IOMODE regVal=0x%x, ch=%d cleared => 0x%x"
+		      , regVal, ch, regVal & ~(0xF << 4*ch) );
+		regVal &= ~(0xF << 4*ch); /* clear this channel's nibble */
 
 		/* Select IO mode */
 		if (bits & WR_DIO_INOUT_DIO) {
@@ -370,10 +384,13 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		/* Appends to iomode TERM and OUTPUT_ENABLE_N bits */
 		iomode |= (((bits & WR_DIO_INOUT_TERM) != 0) << 3)
 			| (((bits & WR_DIO_INOUT_OUTPUT) == 0) << 2);
-		writel(reg | (iomode << 4*ch), &dio->IOMODE);
+		TRACE(TLVL_DEBUG+3,"regVal=0x%x iomode=0x%x ch=%d dio->IOMODE=0x%x writel(0x%x,%p)"
+		      , regVal, iomode, ch, dio->IOMODE, regVal|(iomode<<4*ch), (void*)&dio->IOMODE);
+		writel(regVal | (iomode << 4*ch), &dio->IOMODE); // remember: writel(VAL,ADR)
 	}
+	TRACE(TLVL_DEBUG+3,"FINISH - return 0");
 	return 0;
-}
+}	// wrn_dio_cmd_inout(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
 
 int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
@@ -433,8 +450,10 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 		goto out;
 	}
 
-	if (copy_to_user(rq->ifr_data, cmd, sizeof(*cmd)))
+	if (copy_to_user(rq->ifr_data, cmd, sizeof(*cmd))) {
+		TRACE(TLVL_ERROR, "copy_to_user error - return -ENOMEM");
 		return -EFAULT;
+	}
 out:
 	kfree(cmd);
 
@@ -442,6 +461,7 @@ out:
 		t = ktime_sub(ktime_get(), t0);
 		dev_info(&dev->dev, "ioctl: %li ns\n", (long)ktime_to_ns(t));
 	}
+	TRACE(TLVL_DEBUG+3,"returning %d",ret);
 	return ret;
 }
 
@@ -477,7 +497,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 	struct dio_channel *c;
 	struct TIMESPEC *ts;
 	struct regmap *map;
-	uint32_t mask, reg;
+	uint32_t mask, regVal;
 	int ch, chm;
 
 	if (unlikely(!fmc->eeprom)) {
@@ -524,8 +544,8 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 		map = regmap + ch;
 		ts = NULL;
 		while (1) {
-			reg = readl(base + map->fifo_status);
-			if (reg & 0x20000) /* empty */
+			regVal = readl(base + map->fifo_status);
+			if (regVal & 0x20000) /* empty */
 				break;
 			h = c->bhead;
 			ts = c->tsbuf + h;
