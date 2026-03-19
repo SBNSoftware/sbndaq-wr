@@ -114,6 +114,7 @@ struct wr_dio_cmd {
 #define WR_DIO_F_MASK	0x04	/* Channel is 0x00..0x1f */
 #define WR_DIO_F_LOOP	0x08	/* Output should loop: t[2] is  looping*/
 #define WR_DIO_F_WAIT	0x10	/* Wait for event */
+#define WR_DIO_F_GET	0x20	/* Read mode/state instead of writing */
 
 
 #endif /* __WR_DIO_H__ */

@@ -275,27 +275,94 @@ static int one_mode(int modeChar, int chanIdx)
 	return 0;
 }	// one_mode(int modeChar, int chanIdx)
 
+static char decode_mode(int bits)
+{
+	int is_dio = bits & WR_DIO_INOUT_DIO;
+	int is_one = bits & WR_DIO_INOUT_VALUE;
+	int is_out = bits & WR_DIO_INOUT_OUTPUT;
+	int is_term = bits & WR_DIO_INOUT_TERM;
+
+	if (is_dio) {
+		if (is_out)
+			return is_one ? (is_term ? 'P' : 'p') : (is_term ? 'D' : 'd');
+		if (is_one)
+			return is_term ? 'C' : 'c';
+		return '?';
+	}
+
+	if (is_out)
+		return is_one ? '1' : '0';
+
+	if (is_one)
+		return '?';
+
+	return is_term ? 'I' : 'i';
+}
+
+static void print_mode_reply(int mask)
+{
+	int ch;
+	char all[6];
+
+	for (ch = 0; ch < 5; ch++) {
+		int bits = 0;
+
+		bits |= (cmd->value >> ch) & WR_DIO_INOUT_DIO;
+		bits |= (cmd->value >> ch) & WR_DIO_INOUT_VALUE;
+		bits |= (cmd->value >> ch) & WR_DIO_INOUT_OUTPUT;
+		bits |= (cmd->value >> ch) & WR_DIO_INOUT_TERM;
+		all[ch] = decode_mode(bits);
+	}
+	all[5] = 0;
+
+	if (mask == 0x1f)
+		printf("%s\n", all);
+	else
+		for (ch = 0; ch < 5; ch++)
+			if (mask & (1 << ch))
+				printf("ch %d: %c\n", ch, all[ch]);
+}
+
 
 static int scan_inout(int argc, char **argv)
 {
 	int i, ch;
 	char c;
+	int do_get = 0;
+	int get_mask = 0;
 
 	cmd->flags = WR_DIO_F_MASK;
 	cmd->channel = 0;
 	cmd->value = 0;
 
 	TRACE(TLVL_DEBUG+1, "argc=%d", argc ); /* example: "mode" "1" "D" */
-	if (argc == 2) {
+	if (argc == 1) {
+		do_get = 1;
+		get_mask = 0x1f;
+		cmd->channel = get_mask;
+		cmd->flags |= WR_DIO_F_GET;
+	} else if (argc == 2) {
 		TRACE(TLVL_DEBUG+1, TSPRINTF("argc=2 argv[0]=%s argv[1]=%s", argv[0], argv[1]));
-		if (strlen(argv[1]) != 5) {
-			fprintf(stderr, "%s: %s: wrong argument \"%s\"\n",
-				prgname, argv[0], argv[1]);
-			exit(1);
-		}
-		for (i = 0; i < 5; i++)
-			if (one_mode(argv[1][i], i) < 0)
+		if (strlen(argv[1]) == 1 && sscanf(argv[1], "%i%c", &ch, &c) == 1) {
+			if (ch < 0 || ch > 4) {
+				fprintf(stderr, "%s: mode: invalid channel \"%s\"\n",
+					prgname, argv[1]);
 				return -1;
+			}
+			do_get = 1;
+			get_mask = 1 << ch;
+			cmd->channel = get_mask;
+			cmd->flags |= WR_DIO_F_GET;
+		} else {
+			if (strlen(argv[1]) != 5) {
+				fprintf(stderr, "%s: %s: wrong argument \"%s\"\n",
+					prgname, argv[0], argv[1]);
+				exit(1);
+			}
+			for (i = 0; i < 5; i++)
+				if (one_mode(argv[1][i], i) < 0)
+					return -1;
+		}
 	} else {
 		if (argc < 3 || argc > 11 || ((argc & 1) == 0)) {
 			fprintf(stderr, "%s: %s: wrong number of arguments\n",
@@ -333,6 +400,10 @@ static int scan_inout(int argc, char **argv)
 			prgname, ifname, strerror(errno));
 			return -1;
 	}
+
+	if (do_get)
+		print_mode_reply(get_mask);
+
 	return 0;
 }	// scan_inout(int argc, char **argv)
 
@@ -380,6 +451,8 @@ int main(int argc, char **argv)
 	 * stamp [<channel>]
 	 * stampm [<mask>]
 	 *
+	 * mode
+	 * mode <ch>
 	 * mode <01234>
 	 * mode <ch> <mode> [...]
 	 */

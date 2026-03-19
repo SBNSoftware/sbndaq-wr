@@ -349,6 +349,39 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 	TRACE(TLVL_DEBUG+3,"ch=%d last=%d mask=0x%x value=0x%x"
 		      , ch, last, mask, cmd->value);	
 
+	if (cmd->flags & WR_DIO_F_GET) {
+		cmd->value = 0;
+		regVal = readl(&dio->IOMODE);
+
+		for (; ch <= last; ch++) {
+			uint32_t status;
+			uint32_t src;
+
+			if (((1 << ch) & mask) == 0)
+				continue;
+
+			iomode = WR_DIO_IOMODE_CH_DECODE(regVal, ch);
+			src = iomode & WR_DIO_IOMODE_SRC_MASK;
+
+			if (src != WR_DIO_IOMODE_SRC_GPIO)
+				cmd->value |= WR_DIO_INOUT_DIO << ch;
+			if (src == WR_DIO_IOMODE_SRC_WRPC)
+				cmd->value |= WR_DIO_INOUT_VALUE << ch;
+			if ((iomode & WR_DIO_IOMODE_OUTPUT_ENABLE_N) == 0)
+				cmd->value |= WR_DIO_INOUT_OUTPUT << ch;
+			if (iomode & WR_DIO_IOMODE_TERM_ENABLE)
+				cmd->value |= WR_DIO_INOUT_TERM << ch;
+
+			if (src == WR_DIO_IOMODE_SRC_GPIO) {
+				status = readl(&gpio->status);
+				if (status & WRN_GPIO_VALUE(ch))
+					cmd->value |= WR_DIO_INOUT_VALUE << ch;
+			}
+		}
+
+		return 0;
+	}
+
 	/* handle the 1-channel and mask case in the same loop */
 	for (; ch <= last; ch++) {
 		if (((1 << ch) & mask) == 0)
