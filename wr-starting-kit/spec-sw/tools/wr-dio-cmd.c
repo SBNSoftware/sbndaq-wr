@@ -278,7 +278,7 @@ static int one_mode(int modeChar, int chanIdx)
 	return 0;
 }	// one_mode(int modeChar, int chanIdx)
 
-static char decode_mode(int bits)
+static const char *decode_mode_description(int bits)
 {
 	int is_dio = bits & WR_DIO_INOUT_DIO;
 	int is_one = bits & WR_DIO_INOUT_VALUE;
@@ -286,45 +286,43 @@ static char decode_mode(int bits)
 	int is_term = bits & WR_DIO_INOUT_TERM;
 
 	if (is_dio) {
-		if (is_out)
-			return is_one ? (is_term ? 'P' : 'p') : (is_term ? 'D' : 'd');
+		if (is_out) {
+			if (is_one) {
+				return is_term ? "DIO pulse output with termination" : "DIO pulse output";
+			} else {
+				return is_term ? "DIO regular output with termination" : "DIO regular output";
+			}
+		}
 		if (is_one)
-			return is_term ? 'C' : 'c';
-		return '?';
+			return is_term ? "DIO input active with termination" : "DIO input active";
+		return "DIO unknown";
 	}
 
 	if (is_out)
-		return is_one ? '1' : '0';
+		return is_one ? "Logic output high (1)" : "Logic output low (0)";
 
 	if (is_one)
-		return '?';
+		return "Logic unknown";
 
-	return is_term ? 'I' : 'i';
-}	// decode_mode(int bits)
+	return is_term ? "Logic input with termination" : "Logic input";
+}	// decode_mode_description(int bits)
 
 static void print_mode_reply(int mask)
 {
 	int ch;
-	char all[6];
 
 	TRACE(TLVL_DEBUG+1,"START channel mask=0x%x cmd->value=0x%x",mask,cmd->value);
 	for (ch = 0; ch < 5; ch++) {
-		int bits = 0;
+		if (mask & (1 << ch)) {
+			int bits = 0;
 
-		bits |= (cmd->value >> ch) & WR_DIO_INOUT_DIO;
-		bits |= (cmd->value >> ch) & WR_DIO_INOUT_VALUE;
-		bits |= (cmd->value >> ch) & WR_DIO_INOUT_OUTPUT;
-		bits |= (cmd->value >> ch) & WR_DIO_INOUT_TERM;
-		all[ch] = decode_mode(bits);
+			bits |= (cmd->value >> ch) & WR_DIO_INOUT_DIO;
+			bits |= (cmd->value >> ch) & WR_DIO_INOUT_VALUE;
+			bits |= (cmd->value >> ch) & WR_DIO_INOUT_OUTPUT;
+			bits |= (cmd->value >> ch) & WR_DIO_INOUT_TERM;
+			printf("ch %d: %s\n", ch, decode_mode_description(bits));
+		}
 	}
-	all[5] = 0;
-
-	if (mask == 0x1f)
-		printf("%s\n", all);
-	else
-		for (ch = 0; ch < 5; ch++)
-			if (mask & (1 << ch))
-				printf("ch %d: %c\n", ch, all[ch]);
 	TRACE(TLVL_DEBUG+1,"DONE");
 }	// print_mode_reply
 
