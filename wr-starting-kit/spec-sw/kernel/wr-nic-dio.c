@@ -350,6 +350,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		      , ch, last, mask, cmd->value);	
 
 	if (cmd->flags & WR_DIO_F_GET) {
+		TRACE(TLVL_DEBUG+3,"WR_DIO_F_GET");
 		cmd->value = 0;
 		regVal = readl(&dio->IOMODE);
 
@@ -378,7 +379,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 					cmd->value |= WR_DIO_INOUT_VALUE << ch;
 			}
 		}
-
+		TRACE(TLVL_DEBUG+3,"WR_DIO_F_GET return 0 - cmd->value=0x%x", cmd->value);
 		return 0;
 	}
 
@@ -490,6 +491,7 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 		goto out;
 	}
 
+	TRACE(TLVL_DEBUG+3,"before copy_to_user() cmd->value=0x%x", cmd->value);
 	if (copy_to_user(rq->ifr_data, cmd, sizeof(*cmd))) {
 		TRACE(TLVL_ERROR, "copy_to_user error - return -ENOMEM");
 		return -EFAULT;

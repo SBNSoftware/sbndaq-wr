@@ -216,7 +216,8 @@ static int scan_stamp(int argc, char **argv, int ismask)
 }	// scan_stamp(int argc, char **argv, int ismask)
 
 
-
+// set cmd->channel (mask) and
+//     cmd->value (4 byte fields with 5 channel mask bits each)
 static int one_mode(int modeChar, int chanIdx)
 {
 	if (modeChar == '-')
@@ -226,7 +227,8 @@ static int one_mode(int modeChar, int chanIdx)
 	//Add error message for channel 0 
 	if(chanIdx==0 && strchr("dD01",modeChar))
 	{
-		fprintf(stderr, "Error: Only p/P modes are available as ouput mode for channel 0\n");
+		TRACE(TLVL_ERROR,
+		      "Error: Only p/P modes are available as ouput mode for channel 0");
 		return -1;
 	}
 	
@@ -268,10 +270,11 @@ static int one_mode(int modeChar, int chanIdx)
 		break;
 
 	default:
-		fprintf(stderr, "%s: mode: invalid mode '%c'\n",
-			prgname, c);
+		TRACE(TLVL_ERROR, TSPRINTF("%s: mode: invalid mode '%c'\n",
+		                           prgname, c));
 		return -1;
 	}
+	TRACE(TLVL_DEBUG+1,"cmd->channel=0x%x value=0x%x",cmd->channel, cmd->value);
 	return 0;
 }	// one_mode(int modeChar, int chanIdx)
 
@@ -297,13 +300,14 @@ static char decode_mode(int bits)
 		return '?';
 
 	return is_term ? 'I' : 'i';
-}
+}	// decode_mode(int bits)
 
 static void print_mode_reply(int mask)
 {
 	int ch;
 	char all[6];
 
+	TRACE(TLVL_DEBUG+1,"START channel mask=0x%x cmd->value=0x%x",mask,cmd->value);
 	for (ch = 0; ch < 5; ch++) {
 		int bits = 0;
 
@@ -321,9 +325,10 @@ static void print_mode_reply(int mask)
 		for (ch = 0; ch < 5; ch++)
 			if (mask & (1 << ch))
 				printf("ch %d: %c\n", ch, all[ch]);
-}
+	TRACE(TLVL_DEBUG+1,"DONE");
+}	// print_mode_reply
 
-
+// argv[0] == "mode"
 static int scan_inout(int argc, char **argv)
 {
 	int i, ch;
@@ -341,27 +346,34 @@ static int scan_inout(int argc, char **argv)
 		get_mask = 0x1f;
 		cmd->channel = get_mask;
 		cmd->flags |= WR_DIO_F_GET;
+		TRACE(TLVL_DEBUG+1,TSPRINTF("argc=1 argv[0]=%s - _GET all get_mask=0x%x"
+		                            , argv[0], get_mask) );
 	} else if (argc == 2) {
 		TRACE(TLVL_DEBUG+1, TSPRINTF("argc=2 argv[0]=%s argv[1]=%s", argv[0], argv[1]));
 		if (strlen(argv[1]) == 1 && sscanf(argv[1], "%i%c", &ch, &c) == 1) {
 			if (ch < 0 || ch > 4) {
-				fprintf(stderr, "%s: mode: invalid channel \"%s\"\n",
-					prgname, argv[1]);
+				TRACE(TLVL_ERROR, TSPRINTF("%s: mode: invalid channel \"%s\"\n",
+				                         prgname, argv[1]));
 				return -1;
 			}
 			do_get = 1;
 			get_mask = 1 << ch;
 			cmd->channel = get_mask;
 			cmd->flags |= WR_DIO_F_GET;
+			TRACE(TLVL_DEBUG+1,"_GET ch=%d",ch);
 		} else {
 			if (strlen(argv[1]) != 5) {
-				fprintf(stderr, "%s: %s: wrong argument \"%s\"\n",
-					prgname, argv[0], argv[1]);
+				TRACE(TLVL_ERROR, TSPRINTF("%s: %s: wrong argument \"%s\"",
+				                           prgname, argv[0], argv[1]));
 				exit(1);
 			}
-			for (i = 0; i < 5; i++)
-				if (one_mode(argv[1][i], i) < 0)
+			for (i = 0; i < 5; i++) {
+				TRACE(TLVL_DEBUG+1,
+				      "attempt program/set ch=%d to mode %x", i, argv[1][i] );
+				if (one_mode(argv[1][i], i) < 0) {
 					return -1;
+				}
+			}
 		}
 	} else {
 		if (argc < 3 || argc > 11 || ((argc & 1) == 0)) {
@@ -369,6 +381,7 @@ static int scan_inout(int argc, char **argv)
 				prgname, argv[0]);
 			return -1;
 		}
+		TRACE(TLVL_DEBUG+1, TSPRINTF("argc=2 argv[0]=%s argv[1]=%s", argv[0], argv[1]));
 		while (argc >= 3) {
 			TRACE(TLVL_DEBUG+1, TSPRINTF("argc=%d argv[0]=%s [1]=%s [2]=%s",
 			                             argc, argv[0],argv[1],argv[2]));
@@ -394,6 +407,9 @@ static int scan_inout(int argc, char **argv)
 			argc -= 2;
 		}
 	}
+	TRACE(TLVL_DEBUG+1
+	      , "before ioctl(PRIV_MEZZANINE_CMD) do_get=%d channel=0x%x value=0x%x"
+	      , do_get, cmd->channel, cmd->value);
 	ifr.ifr_data = (void *)cmd;
 	if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) { /* See spec-sw/kernel/wr_nic/nic-core.c:303 */
 		fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
@@ -401,9 +417,14 @@ static int scan_inout(int argc, char **argv)
 			return -1;
 	}
 
-	if (do_get)
+	if (do_get) {
+		cmd->value = ((struct wr_dio_cmd *)ifr.ifr_data)->value;
+		TRACE(TLVL_DEBUG+1,"calling print_mode_reply(get_mask=0x%x) cmd->value=0x%x"
+		      , get_mask, cmd->value);
 		print_mode_reply(get_mask);
+	}
 
+	TRACE(TLVL_DEBUG+1,"return 0");
 	return 0;
 }	// scan_inout(int argc, char **argv)
 
