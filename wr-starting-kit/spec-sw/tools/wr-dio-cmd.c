@@ -320,6 +320,7 @@ static void print_mode_reply(int mask)
 			bits |= (cmd->value >> ch) & WR_DIO_INOUT_VALUE;
 			bits |= (cmd->value >> ch) & WR_DIO_INOUT_OUTPUT;
 			bits |= (cmd->value >> ch) & WR_DIO_INOUT_TERM;
+			TRACE(TLVL_DEBUG+1,"calling decode_mode_description(0x%x)",bits);
 			printf("ch %d: %s\n", ch, decode_mode_description(bits));
 		}
 	}
