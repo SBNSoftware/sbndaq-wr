@@ -282,14 +282,16 @@ again:
 		}
 		map = regmap + ch;
 		while (1) {
-			TRACE(TLVL_DEBUG+22,"while(1) BEGIN - ch=%d nstamp=%d",ch,nstamp);
+			int snap_head = dioChan_p->bhead;
+			int snap_tail = dioChan_p->btail;
+			TRACE(TLVL_DEBUG+22,"STAMP ch=%d bhead=%d btail=%d nstamp=%d",ch,snap_head,snap_tail,nstamp);
 			if (nstamp == WR_DIO_N_STAMP) {
 				TRACE(TLVL_DEBUG+23,"nstamp==WR_DIO_N_STAMP==%d - break",nstamp);
 				break;
 			}
-			if (dioChan_p->bhead == dioChan_p->btail) {
-				TRACE(TLVL_DEBUG+24,"nstamp=%d dioChan_p->bhead(%d)==dioChan_p->btail(%d) empty? - break"
-				      , nstamp, dioChan_p->bhead, dioChan_p->btail);
+			if (snap_head == snap_tail) {
+				TRACE(TLVL_DEBUG+24,"STAMP ch=%d EMPTY bhead(%d)==btail(%d) nstamp=%d - break"
+				      , ch, snap_head, snap_tail, nstamp);
 				break;
 			}
 			*ts = dioChan_p->tsbuf[dioChan_p->btail];
@@ -606,6 +608,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 			h = c->bhead;
 			ts = c->tsbuf + h;
 			c->bhead = (h + 1) % WRN_DIO_BUFFER_LEN;
+			TRACE(TLVL_DEBUG+51,"IRQ ch=%d bhead %d->%d btail=%d", ch, h, c->bhead, c->btail);
 			if (c->bhead == c->btail)
 				c->btail = (c->btail + 1) % WRN_DIO_BUFFER_LEN;
 			/*
