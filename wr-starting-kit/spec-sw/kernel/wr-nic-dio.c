@@ -149,17 +149,24 @@ static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
 	struct DIO_WB __iomem *dio = drvdata->wrdio_base;
 	void __iomem *base = dio;
 	struct regmap *map;
-	TRACE(TLVL_DEBUG+15,"__wrn_new_pulse(drvdata,%d,%lld.%09ld) START",ch,ts->tv_sec,ts->tv_nsec);
+	TRACE(TLVL_DEBUG+1,"(drvdata,%d,%lld.%09ld) START",ch,ts->tv_sec,ts->tv_nsec);
 
 	map = regmap + ch;
 
 	wrn_ts_sub(ts, 8); /* 1 cycle, to account for output latencies */
 	writel(ts->tv_nsec / 8, base + map->cycle);
+	ndelay(200);
+	TRACE(TLVL_DEBUG+2,"TRACE after writel(ts->tv_nsec / 8 = %ld, base + map->cycle)", ts->tv_nsec/8);
 	writel(GET_HI32(ts->tv_sec), base + map->trig_h);
+	ndelay(200);
+	TRACE(TLVL_DEBUG+3,"TRACE after writel(GET_HI32(ts->tv_sec=%lld), base + map->trig_h)", ts->tv_sec);
 	writel(ts->tv_sec, base + map->trig_l);
+	ndelay(200);
+	TRACE(TLVL_DEBUG+4,"TRACE after writel(ts->tv_sec=%lld, base + map->trig_l)", ts->tv_sec);
 
 	writel(1 << ch, &dio->R_LATCH);
-	TRACE(TLVL_DEBUG+15,"__wrn_new_pulse(drvdata,%d,%lld.%09ld) DONE/RETURN",ch,ts->tv_sec,ts->tv_nsec);
+	writel(1 << ch, &dio->R_LATCH);
+	TRACE(TLVL_DEBUG+5,"(drvdata,%d,%lld.%09ld) DONE/RETURN",ch,ts->tv_sec,ts->tv_nsec);
 }	// __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch, struct TIMESPEC *ts)
 
 static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
@@ -176,7 +183,7 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 	int ch;
 
 	ch = cmd->channel;
-	TRACE(TLVL_DEBUG+10,"ch=%d",ch);
+	TRACE(TLVL_DEBUG+10,"ch=%d flags=0x%x",ch,cmd->flags);
 	if (ch > 4) {
 		TRACE(TLVL_ERROR,"return -EINVAL - invalid channel");
 		return -EINVAL; /* mask not supported */
@@ -187,14 +194,15 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 
 	/* First, configure this bit as DIO output */
 	regVal = readl(&dio->IOMODE);
-	TRACE(TLVL_DEBUG,"ch=%d IOMODE regVal read=0x%x write=0x%x",ch,regVal,regVal|(1<<4*ch));
+	TRACE(TLVL_DEBUG+11,"ch=%d IOMODE regVal read=0x%x write=0x%x",ch,regVal,regVal|(1<<4*ch));
 	writel(regVal | (1 << 4*ch), &dio->IOMODE);
+	ndelay(200);
 
 	writel(ts[1].tv_nsec / 8, base + map->pulse); /* width */
 
 	if (cmd->flags & WR_DIO_F_NOW) {
 		/* if "now" we are done */
-		TRACE(TLVL_DEBUG+10,"cmd->flags&WR_DIO_F_NOW == true -- return 0");
+		TRACE(TLVL_DEBUG+12,"cmd->flags&WR_DIO_F_NOW == true -- return 0");
 		writel(1 << ch, &dio->PULSE);
 		return 0;
 	}
@@ -225,10 +233,11 @@ static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,
 		c->delay = ts[2];
 	}
 
-	TRACE(TLVL_DEBUG+10,"calling __wrn_new_pulse(drvdata, %d, %lld.%09ld)",
+	TRACE(TLVL_DEBUG+13,"calling __wrn_new_pulse(drvdata, %d, %lld.%09ld)",
 	      ch, ts->tv_sec, ts->tv_nsec);
 	__wrn_new_pulse(drvdata, ch, ts);
-	TRACE(TLVL_DEBUG+10,"Done, return 0");
+	TRACE(TLVL_DEBUG+14,"__wrn_new_pulse returned");
+	TRACE(TLVL_DEBUG+15,"Done,return 0");
 	return 0;
 }	// wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
@@ -242,7 +251,7 @@ static int wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata,
 	int mask, ch, last;
 	int nstamp = 0;
 
-	TRACE(TLVL_DEBUG+12,"START - WRN_DIO_BUFFER_LEN=%d WR_DIO_N_STAMP=%d",
+	TRACE(TLVL_DEBUG+18,"START - WRN_DIO_BUFFER_LEN=%d WR_DIO_N_STAMP=%d",
 	      WRN_DIO_BUFFER_LEN, WR_DIO_N_STAMP);
 	if ((cmd->flags & (WR_DIO_F_MASK || WR_DIO_F_WAIT))
 	    == (WR_DIO_F_MASK || WR_DIO_F_WAIT)) {
@@ -255,30 +264,31 @@ again:
 		ch = 0;
 		last = 4;
 		mask = cmd->channel;
+		TRACE(TLVL_DEBUG+19,"START/again/DIO_F_MASK ch=%d last=%d mask=0x%x nstamp=%d",ch,last,mask,nstamp);
 	} else {
 		ch = cmd->channel;
 		last = ch;
 		mask = (1 << ch);
+		TRACE(TLVL_DEBUG+19,"START/again/DIO_F_SINGLE ch=%d last=%d mask=0x%x nstamp=%d",ch,last,mask,nstamp);
 	}
-	TRACE(TLVL_DEBUG+12,"START/again ch=%d last=%d make=0x%x nstamp=%d",ch,last,mask,nstamp);
 	/* handle the 1-channel and mask case in the same loop */
 	dioChan_p = d->ch + ch;
 	for (; ch <= last; ch++, dioChan_p++) {
-		TRACE(TLVL_DEBUG+12,"Beginning of for loop - ch=%d, last=%d, mask=0x%x dioChan.bhead/tail=%d/%d .target_channel=%d"
+		TRACE(TLVL_DEBUG+20,"Beginning of for loop - ch=%d, last=%d, mask=0x%x dioChan.bhead/tail=%d/%d .target_channel=%d"
 		      , ch,last, mask, dioChan_p->bhead, dioChan_p->btail, dioChan_p->target_channel );
 		if (((1 << ch) & mask) == 0) {
-			TRACE(TLVL_DEBUG+12,"ch=%d, mask=0x%x - continue", ch, mask );
+			TRACE(TLVL_DEBUG+21,"ch=%d, mask=0x%x - continue", ch, mask );
 			continue;
 		}
 		map = regmap + ch;
 		while (1) {
-			TRACE(TLVL_DEBUG+12,"while(1) BEGIN - nstamp=%d",nstamp);
+			TRACE(TLVL_DEBUG+22,"while(1) BEGIN - ch=%d nstamp=%d",ch,nstamp);
 			if (nstamp == WR_DIO_N_STAMP) {
-				TRACE(TLVL_DEBUG+12,"nstamp==WR_DIO_N_STAMP==%d - break",nstamp);
+				TRACE(TLVL_DEBUG+23,"nstamp==WR_DIO_N_STAMP==%d - break",nstamp);
 				break;
 			}
 			if (dioChan_p->bhead == dioChan_p->btail) {
-				TRACE(TLVL_DEBUG+12,"nstamp=%d dioChan_p->bhead(%d)==dioChan_p->btail(%d) empty? - break"
+				TRACE(TLVL_DEBUG+24,"nstamp=%d dioChan_p->bhead(%d)==dioChan_p->btail(%d) empty? - break"
 				      , nstamp, dioChan_p->bhead, dioChan_p->btail);
 				break;
 			}
@@ -288,15 +298,15 @@ again:
 			ts++;
 		}
 		if (nstamp) {
-			TRACE(TLVL_DEBUG+12,"setting cmd->channel=%d",ch);
+			TRACE(TLVL_DEBUG+25,"setting cmd->channel=%d",ch);
 			cmd->channel = ch;
 			break;
 		}
 	}
 	cmd->nstamp = nstamp;
-	TRACE(TLVL_DEBUG+12,"cmd->nstamp = nstamp(%d)",nstamp);
+	TRACE(TLVL_DEBUG+26,"ch=%d cmd->nstamp = nstamp(%d)",ch,nstamp);
 
-	/* The user may asketo wait for timestamps, but for 1 channel only */
+	/* The user may ask to wait for timestamps, but for 1 channel only */
 	if (!nstamp && cmd->flags & WR_DIO_F_WAIT) {
 		ch--; dioChan_p--; /* The for above incremeted them */
 		/*
@@ -304,26 +314,26 @@ again:
 		 * So we need to unlock, but that is dangerous for rmmod.
 		 * Let's thus increase the module usage while sleeping
 		 */
-		TRACE(TLVL_DEBUG+12,"before wait_event_interruptible");
+		TRACE(TLVL_DEBUG+27,"before wait_event_interruptible ch=%d", ch);
 		try_module_get(THIS_MODULE);
 		rtnl_unlock();
 		wait_event_interruptible(dioChan_p->q, dioChan_p->bhead != dioChan_p->btail);
 		rtnl_lock();
 		module_put(THIS_MODULE);
-		TRACE(TLVL_DEBUG+12,"after wait_event_interruptible");
+		TRACE(TLVL_DEBUG+28,"after wait_event_interruptible");
 		if (signal_pending(current)) {
-			TRACE(TLVL_DEBUG+12,"signal_pending(current) - return -ERESTARTSYS");
+			TRACE(TLVL_DEBUG+29,"signal_pending(current) - return -ERESTARTSYS");
 			return -ERESTARTSYS;
 		}
-		TRACE(TLVL_DEBUG+12,"before goto again");
+		TRACE(TLVL_DEBUG+30,"before goto again");
 		goto again;
 	}
 
 	if (!nstamp) {
-		TRACE(TLVL_DEBUG+12,"nstamp==0 return -EAGAIN");
+		TRACE(TLVL_DEBUG+31,"nstamp==0 return -EAGAIN");
 		return -EAGAIN;
 	}
-	TRACE(TLVL_DEBUG+12,"return 0");
+	TRACE(TLVL_DEBUG+32,"return 0");
 	return 0;
 }	// wrn_dio_cmd_stamp(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
@@ -335,7 +345,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 	int mask, ch, last, bits;
 	uint32_t regVal, iomode;
 
-	TRACE(TLVL_DEBUG+3,"START - flags=0x%x WR_DIO_F_MASK=0x%x value=0x%x"
+	TRACE(TLVL_DEBUG+33,"START - flags=0x%x WR_DIO_F_MASK=0x%x value=0x%x"
 	      , cmd->flags, WR_DIO_F_MASK, cmd->value);
 	if (cmd->flags & WR_DIO_F_MASK) {
 		ch = 0;
@@ -346,11 +356,11 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		last = ch;
 		mask = (1 << ch);
 	}
-	TRACE(TLVL_DEBUG+3,"ch=%d last=%d mask=0x%x value=0x%x"
+	TRACE(TLVL_DEBUG+34,"ch=%d last=%d mask=0x%x value=0x%x"
 		      , ch, last, mask, cmd->value);	
 
 	if (cmd->flags & WR_DIO_F_GET) {
-		TRACE(TLVL_DEBUG+3,"WR_DIO_F_GET");
+		TRACE(TLVL_DEBUG+35,"WR_DIO_F_GET");
 		cmd->value = 0;
 		regVal = readl(&dio->IOMODE);
 
@@ -379,7 +389,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 					cmd->value |= WR_DIO_INOUT_VALUE << ch;
 			}
 		}
-		TRACE(TLVL_DEBUG+3,"WR_DIO_F_GET return 0 - cmd->value=0x%x", cmd->value);
+		TRACE(TLVL_DEBUG+36,"WR_DIO_F_GET return 0 - cmd->value=0x%x", cmd->value);
 		return 0;
 	}
 
@@ -387,7 +397,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 	for (; ch <= last; ch++) {
 		if (((1 << ch) & mask) == 0)
 			continue;
-		TRACE(TLVL_DEBUG+3,"in for, ch=%d mask=0x%x", ch, mask);
+		TRACE(TLVL_DEBUG+37,"in for, ch=%d mask=0x%x", ch, mask);
 		/*
 		 * In mask mode cmd->value carries channel bitmaps (0..4, 8..12,
 		 * 16..20, 24..28), so align selected channel to bit 0.
@@ -398,7 +408,7 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		/* Obtain the current value in iomode */
 		
 		regVal  = readl(&dio->IOMODE);
-		TRACE(TLVL_DEBUG,"current IOMODE regVal=0x%x, ch=%d cleared => 0x%x"
+		TRACE(TLVL_DEBUG+38,"current IOMODE regVal=0x%x, ch=%d cleared => 0x%x"
 		      , regVal, ch, regVal & ~(0xF << 4*ch) );
 		regVal &= ~(0xF << 4*ch); /* clear this channel's nibble */
 
@@ -406,14 +416,14 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		if (bits & WR_DIO_INOUT_DIO) {
 			if(bits & WR_DIO_INOUT_VALUE) {
 				iomode = 2; /* WRPC connection */
-				TRACE(TLVL_DEBUG+3,"WRPC connection for ch=%d",ch);
+				TRACE(TLVL_DEBUG+39,"WRPC connection for ch=%d",ch);
 			} else {
 				iomode = 1; /* DIO connection */
-				TRACE(TLVL_DEBUG+3,"DIO connection for ch=%d",ch);
+				TRACE(TLVL_DEBUG+39,"DIO connection for ch=%d",ch);
 			}
 		} else {
 			iomode = 0; /* GPIO  connection */
-			TRACE(TLVL_DEBUG+3,"GPIO connection for ch=%d",ch);
+			TRACE(TLVL_DEBUG+39,"GPIO connection for ch=%d",ch);
 
 			/* Output value is bit 0 (0x1) */
 			if (bits & WR_DIO_INOUT_VALUE)
@@ -425,11 +435,11 @@ static int wrn_dio_cmd_inout(struct wrn_drvdata *drvdata,
 		/* Appends to iomode TERM and OUTPUT_ENABLE_N bits */
 		iomode |= (((bits & WR_DIO_INOUT_TERM) != 0) << 3)
 			| (((bits & WR_DIO_INOUT_OUTPUT) == 0) << 2);
-		TRACE(TLVL_DEBUG+3,"regVal=0x%x iomode=0x%x ch=%d dio->IOMODE=0x%x writel(0x%x,%p)"
+		TRACE(TLVL_DEBUG+40,"regVal=0x%x iomode=0x%x ch=%d dio->IOMODE=0x%x writel(0x%x,%p)"
 		      , regVal, iomode, ch, dio->IOMODE, regVal|(iomode<<4*ch), (void*)&dio->IOMODE);
 		writel(regVal | (iomode << 4*ch), &dio->IOMODE); // remember: writel(VAL,ADR)
 	}
-	TRACE(TLVL_DEBUG+3,"FINISH - return 0");
+	TRACE(TLVL_DEBUG+41,"FINISH - return 0");
 	return 0;
 }	// wrn_dio_cmd_inout(struct wrn_drvdata *drvdata, struct wr_dio_cmd *cmd)
 
@@ -442,9 +452,9 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 	ktime_t t, t0;
 	int ret;
 
-	TRACE(TLVL_DEBUG+2, "Ron - start strong wrn_mezzanine_ioctl wrn_stat=%d",wrn_stat);
+	TRACE(TLVL_DEBUG+42, "Ron - start strong wrn_mezzanine_ioctl wrn_stat=%d",wrn_stat);
 	if (ioctlcmd == PRIV_MEZZANINE_ID) {
-		TRACE(TLVL_DEBUG+2, "ioctlcmd==PRIV_MEZZANINE_ID - return -EAGAIN");
+		TRACE(TLVL_DEBUG+43, "ioctlcmd==PRIV_MEZZANINE_ID - return -EAGAIN");
 		return -EAGAIN; /* Special marker */
 	}
 	if (ioctlcmd != PRIV_MEZZANINE_CMD) {
@@ -470,28 +480,28 @@ int wrn_mezzanine_ioctl(struct net_device *dev, struct ifreq *rq,
 
 	switch(cmd->command) {
 	case WR_DIO_CMD_PULSE:
-		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_PULSE");
+		TRACE(TLVL_DEBUG+44,"cmd->command case WR_DIO_CMD_PULSE");
 		ret = wrn_dio_cmd_pulse(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_STAMP:
-		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_STAMP");
+		TRACE(TLVL_DEBUG+44,"cmd->command case WR_DIO_CMD_STAMP");
 		ret = wrn_dio_cmd_stamp(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_INOUT:
-		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_INOUT");
+		TRACE(TLVL_DEBUG+44,"cmd->command case WR_DIO_CMD_INOUT");
 		ret = wrn_dio_cmd_inout(drvdata, cmd);
 		break;
 	case WR_DIO_CMD_DAC:
-		TRACE(TLVL_DEBUG+3,"cmd->command case WR_DIO_CMD_DAC");
+		TRACE(TLVL_DEBUG+44,"cmd->command case WR_DIO_CMD_DAC");
 		ret = -ENOTSUPP;
 		goto out;
 	default:
-		TRACE(TLVL_DEBUG+3,"cmd->command case default/EINVAL");
+		TRACE(TLVL_DEBUG+44,"cmd->command case default/EINVAL");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	TRACE(TLVL_DEBUG+3,"before copy_to_user() cmd->value=0x%x", cmd->value);
+	TRACE(TLVL_DEBUG+45,"before copy_to_user() cmd->value=0x%x", cmd->value);
 	if (copy_to_user(rq->ifr_data, cmd, sizeof(*cmd))) {
 		TRACE(TLVL_ERROR, "copy_to_user error - return -ENOMEM");
 		return -EFAULT;
@@ -503,7 +513,7 @@ out:
 		t = ktime_sub(ktime_get(), t0);
 		dev_info(&dev->dev, "ioctl: %li ns\n", (long)ktime_to_ns(t));
 	}
-	TRACE(TLVL_DEBUG+3,"returning %d",ret);
+	TRACE(TLVL_DEBUG+46,"returning %d",ret);
 	return ret;
 }
 
@@ -519,7 +529,9 @@ static void wrn_trig_next_pulse(struct wrn_drvdata *drvdata,int ch,
 	} else {
 		newts = TIMESPEC_ADD(*ts, c->delay);
 	}
+	TRACE(TLVL_DEBUG+47,"calling __wrn_new_pulse(drvdata, %d, %lld.%09ld)", c->target_channel, newts.tv_sec, newts.tv_nsec);	
 	__wrn_new_pulse(drvdata, c->target_channel, &newts);
+	TRACE(TLVL_DEBUG+48,"__wrn_new_pulse returned");
 
 	/* If the count is not-infinite, decrement it */
 	if (atomic_read(&c->count) > 0)
@@ -542,6 +554,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 	uint32_t mask, regVal;
 	int ch, chm;
 
+	TRACE(TLVL_DEBUG+49,"START");
 	if (unlikely(!fmc->eeprom)) {
 		dev_err(fmc->hwdev, "WR-DIO: No mezzanine, disabling irqs\n");
 		writel(~0, &dio->EIC_IDR);
@@ -568,6 +581,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 		if (rate_avg > 80) {
 			dev_warn(fmc->hwdev, "DIO irq takes > 80%% CPU time: "
 				 "disabling\n");
+			TRACE(TLVL_WARNING,"DIO irq takes > 80%% CPU time: disabling");
 			writel(WRN_VIC_MASK_DIO, &vic->IDR);
 		}
 	}
@@ -612,6 +626,7 @@ irqreturn_t wrn_dio_interrupt(struct fmc_device *fmc)
 		wake_up_interruptible(&c->q);
 	}
 	t_end = ktime_get();
+	TRACE(TLVL_DEBUG+50,"IRQ_HANDLED");
 	return IRQ_HANDLED;
 }
 
