@@ -76,7 +76,7 @@ static int scan_pulse(int argc, char **argv)
 {
 	char c;
 
-	if (argc != 4 && argc != 6) {
+	if (argc != 3 && argc != 4 && argc != 6) {
 		fprintf(stderr, "%s: %s: wrong number of arguments\n",
 			prgname, argv[0]);
 		fprintf(stderr, "  Use: %s <channel> <duration> <when> "
@@ -89,6 +89,19 @@ static int scan_pulse(int argc, char **argv)
 		fprintf(stderr, "%s: %s: not a channel number \"%s\"\n",
 			prgname, argv[0], argv[1]);
 		return -1;
+	}
+
+	if (argc == 3) {
+		/* If only 3 args, we have the offset form: pulse <ch> .<offset> */
+		*(int*)&cmd->value = atoi(argv[2]); /* Default to 0 if no offset provided */
+		cmd->flags |= WR_DIO_F_PULSOFF;
+		ifr.ifr_data = (void *)cmd;
+		if (ioctl(sock, PRIV_MEZZANINE_CMD, &ifr) < 0) {
+			fprintf(stderr, "%s: ioctl(PRIV_MEZZANINE_CMD(%s)): %s\n",
+			prgname, ifname, strerror(errno));
+			return -1;
+		}
+		return 0;
 	}
 
 	/* Duration is first time argument but position 1 for ioctl */
@@ -464,9 +477,10 @@ int main(int argc, char **argv)
 	/*
 	 * Parse the command line:
 	 *
-	 * pulse <ch> .<len> <seconds>.<fraction>
-	 * pulse <ch> .<len> now
-	 * pulse <ch> .<len> +<seconds>.<fraction>
+	 * pulse <ch> .<len> <seconds>.<fraction>  [<period> <count>]
+	 * pulse <ch> .<len> now                   [<period> <count>]
+	 * pulse <ch> .<len> +<seconds>.<fraction> [<period> <count>]
+	 * pulse <ch> <offset>
 	 *
 	 * stamp [<channel>]
 	 * stampm [<mask>]

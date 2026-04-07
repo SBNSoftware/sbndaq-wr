@@ -115,6 +115,7 @@ struct wr_dio_cmd {
 #define WR_DIO_F_LOOP	0x08	/* Output should loop: t[2] is  looping*/
 #define WR_DIO_F_WAIT	0x10	/* Wait for event */
 #define WR_DIO_F_GET	0x20	/* Read mode/state instead of writing */
+#define WR_DIO_F_PULSOFF	0x40	/* set the pulse offset to channel 4 pulses*/
 
 
 #endif /* __WR_DIO_H__ */

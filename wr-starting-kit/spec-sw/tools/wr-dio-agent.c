@@ -118,7 +118,9 @@ int main(int argc, char **argv)
 		exit(1);
 
 	while (1) {
+		TRACE(TLVL_DEBUG+1,"before recv()");
 		len = recv(agent_sock, &f, sizeof(f), MSG_TRUNC);
+		TRACE(TLVL_DEBUG+1,"after recv() - len=%i",len);
 		if (len != sizeof(f)) {
 			fprintf(stderr, "%s: recevied unexpected frame length"
 				" (%i instead of %lu)\n", agent_prgname, len,
