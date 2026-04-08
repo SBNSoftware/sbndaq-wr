@@ -15,6 +15,11 @@
 #include <linux/gpio.h>
 #include <linux/fmc-sdb.h>
 #include "spec.h"
+#ifdef DO_TRACE
+# include "TRACE/trace.h"
+#else
+# define TRACE(...)
+#endif
 
 static int spec_test_irq;
 module_param_named(test_irq, spec_test_irq, int, 0444);
@@ -100,9 +105,12 @@ static int spec_irq_request(struct fmc_device *fmc, irq_handler_t handler,
 	int ret;
 	u32 value;
 
+	TRACE(TLVL_DEBUG+20,"START");
 	ret = request_irq(fmc->irq, handler, flags, name, fmc);
-	if (ret)
+	if (ret) {
+		TRACE(TLVL_ERROR,"DONE - ERROR");
 		return ret;
+	}
 
 	if (spec_use_msi) {
 		/* A check and a hack, but doesn't work on all computers */
@@ -115,6 +123,7 @@ static int spec_irq_request(struct fmc_device *fmc, irq_handler_t handler,
 	}
 
 	/* Interrupts are enabled by the driver, with gpio_config() */
+	TRACE(TLVL_DEBUG+21,"DONE - OK");
 	return 0;
 }
 
@@ -290,10 +299,12 @@ static irqreturn_t spec_test_handler(int irq, void *dev_id)
 	struct fmc_device *fmc = dev_id;
 	struct spec_dev *spec = fmc->carrier_data;
 
+	TRACE(TLVL_DEBUG+40,"START");
 	dev_info(fmc->hwdev, "received interrupt %i\n", irq);
 	spec->irq_count++;
 	complete(&spec->compl);
 	fmc->op->irq_ack(fmc);
+	TRACE(TLVL_DEBUG+41,"DONE");
 	return IRQ_HANDLED;
 }
 

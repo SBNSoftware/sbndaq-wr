@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		TRACE(TLVL_DEBUG+1,"command %i, ch %i, t %li.%09li\n",
+		TRACE(TLVL_DEBUG+2,"command %i, ch %i, t %li.%09li\n",
 			       f.cmd.command, f.cmd.channel, f.cmd.t[0].tv_sec,
 			       f.cmd.t[0].tv_nsec);
 

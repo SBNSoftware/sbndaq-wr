@@ -64,7 +64,7 @@ irqreturn_t wrn_handler(int irq, void *dev_id)
 	}
 
 	drvdata = pdev->dev.platform_data;
-	TRACE(TLVL_DEBUG+1,"drvdata=%p", (void*)drvdata);
+	TRACE(TLVL_DEBUG+1,"START drvdata=%p", (void*)drvdata);
 	vic = (typeof(vic)) drvdata->vic_base;
 
 	/*
@@ -93,15 +93,15 @@ irqreturn_t wrn_handler(int irq, void *dev_id)
 	vector = readl(&vic->VAR);
 
 	if (vector == WRN_VIC_ID_NIC) {
-		TRACE(TLVL_DEBUG+1,"before wrn_interrtup(irq, drvdata->wrn)");
+		TRACE(TLVL_DEBUG+2,"before wrn_interrtup(irq, drvdata->wrn)");
 		ret = wrn_interrupt(irq, drvdata->wrn);
 	}
 	else if (vector == WRN_VIC_ID_TXTSU) {
-		TRACE(TLVL_DEBUG+1,"before wrn_tstamp_interrtup(irq, drvdata->wrn)");
+		TRACE(TLVL_DEBUG+2,"before wrn_tstamp_interrtup(irq, drvdata->wrn)");
 		ret = wrn_tstamp_interrupt(irq, drvdata->wrn);
 	}
 	else if (vector == WRN_VIC_ID_DIO) {
-		TRACE(TLVL_DEBUG+1,"before wrn_dio_interrtup(fmc)");
+		TRACE(TLVL_DEBUG+2,"before wrn_dio_interrtup(fmc)");
 		ret = wrn_dio_interrupt(fmc /* different arg! */);
 	}
 
@@ -109,7 +109,7 @@ irqreturn_t wrn_handler(int irq, void *dev_id)
 
 	writel(0, &vic->EOIR);
 
-	TRACE(TLVL_DEBUG+1,"wrn_dio_interrupt return");
+	TRACE(TLVL_DEBUG+1,"DONE");
 	return ret;
 }	// wrn_handler(int irq, void *dev_id)
 

@@ -475,6 +475,7 @@ void wrn_rx_interrupt(unsigned long arg)
 	struct wrn_rxd __iomem *rx;
 	u32 reg;
 
+	TRACE(TLVL_DEBUG+20,"START");
 	while (1) {
 		desc = wrn->next_rx;
 		rx = wrn->rxd + desc;
@@ -485,6 +486,7 @@ void wrn_rx_interrupt(unsigned long arg)
 		wrn->next_rx = __wrn_next_desc(desc);
 	}
 	writel(NIC_EIC_IER_RCOMP, (void *)wrn->regs + 0x24 /* IER */);
+	TRACE(TLVL_DEBUG+21,"DONE");
 }
 
 /* This, lazily, remains in hard-irq context */
@@ -497,6 +499,7 @@ static void wrn_tx_interrupt(struct wrn_dev *wrn)
 	u32 reg;
 	int i;
 
+	TRACE(TLVL_DEBUG+30,"START");
 	/* Loop using our tail until one is not sent */
 	while ( (i = wrn->next_tx_tail) != wrn->next_tx_head) {
 		/* Check if this is txdone */
@@ -524,6 +527,7 @@ static void wrn_tx_interrupt(struct wrn_dev *wrn)
 		}
 		wrn->next_tx_tail = __wrn_next_desc(i);
 	}
+	TRACE(TLVL_DEBUG+31,"DONE");
 }
 
 irqreturn_t wrn_interrupt(int irq, void *dev_id)
@@ -532,6 +536,7 @@ irqreturn_t wrn_interrupt(int irq, void *dev_id)
 	struct NIC_WB *regs = wrn->regs;
 	u32 i, irqs;
 
+	TRACE(TLVL_DEBUG+40,"START");
 	irqs = readl((void *)regs + 0x2c /*EIC_ISR */);
 	i =  readl(&regs->SR);
 	pr_debug("%s: irqs 0x%x, sr 0x%x\n", __func__, irqs, i);
@@ -555,5 +560,6 @@ irqreturn_t wrn_interrupt(int irq, void *dev_id)
 		writel(NIC_EIC_IDR_RCOMP, (void *)wrn->regs + 0x20 /* IDR */);
 		tasklet_schedule(&wrn->rx_tlet);
 	}
+	TRACE(TLVL_DEBUG+41,"DONE");
 	return IRQ_HANDLED;
 }
