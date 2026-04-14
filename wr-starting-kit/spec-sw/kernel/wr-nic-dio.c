@@ -133,7 +133,7 @@ struct dio_device {
 	spinlock_t hw_lock;  /* Serialize all DIO hardware access */
 };
 
-static int channel_pulse_offsets[5] = {0, 0, 0, 0, 200000}; /* For diagnostics: add offset and track chx-now */
+static int channel_pulse_offsets[5] = {0, 0, 0, 0, 0}; /* For diagnostics: add offset and track chx-now */
 
 /* Instead of timespec_sub, just subtract the nanos */
 static inline void wrn_ts_sub(struct TIMESPEC *ts, int nano)
@@ -157,78 +157,48 @@ static void __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch,
 	struct PPSG_WB __iomem *ppsg = drvdata->ppsg_base;
 	void __iomem *base = dio;
 	struct regmap *map;
-	uint32_t h1, low, h2, now_nsec;
+	uint32_t h1, low, h2, now_ticks;
 	unsigned long now_sec;
+	long now_ns;		/* now_ticks converted to actual nanoseconds */
 	long delta_ns;
-	static struct TIMESPEC ch1_sched_time;  /* Remember ch=1's scheduled time */
-	long ch_delta_ns;
-
-	/* Read current WR time for diagnostics */
-	h1 = readl(&ppsg->CNTR_UTCHI);
-	low = readl(&ppsg->CNTR_UTCLO);
-	h2 = readl(&ppsg->CNTR_UTCHI);
-	if (h2 != h1)
-		low = readl(&ppsg->CNTR_UTCLO);
-	now_nsec = readl(&ppsg->CNTR_NSEC);
-	/* Check for ns rollover: if seconds changed, re-read */
-	{
-		uint32_t low2 = readl(&ppsg->CNTR_UTCLO);
-		if (low2 != low) {
-			low = low2;
-			h2 = readl(&ppsg->CNTR_UTCHI);
-			now_nsec = readl(&ppsg->CNTR_NSEC);
-		}
-	}
-	now_sec = low;
-	SET_HI32(now_sec, h2);
-
-	/* Calculate delta: scheduled - current (in ns, approximate) */
-	delta_ns = (ts->tv_sec - now_sec) * 1000000000L + (ts->tv_nsec - now_nsec);
-
-	/*
-	 * DIAGNOSTIC: Add 200us	 offset to ch=4 and track delta from ch=1
-	 */
-	if (ch == 1) {
-		ch1_sched_time = *ts;  /* Save ch=1's scheduled time */
-		TRACE(TLVL_DEBUG+1,"(drvdata,%d,%lld.%09ld) START now=%ld.%09u delta_ns=%'ld (saved ch1_sched_time)",
-		      ch, ts->tv_sec, ts->tv_nsec, now_sec, now_nsec, delta_ns);
-	} else if (ch == 4) {
-		/* Calculate ch4_time - ch1_time before adding offset */
-		ch_delta_ns = (ts->tv_sec - ch1_sched_time.tv_sec) * 1000000000L 
-		            + (ts->tv_nsec - ch1_sched_time.tv_nsec);
-		TRACE(TLVL_DEBUG+1,"(drvdata,%d,%lld.%09ld) BEFORE +200us: ch4-ch1=%ldns",
-		      ch, ts->tv_sec, ts->tv_nsec, ch_delta_ns);
-		
-		/* Add 200us (200,000 ns) to ch=4's scheduled time */
-		ts->tv_nsec += channel_pulse_offsets[ch];
-		if (ts->tv_nsec >= 1000000000) {
-			ts->tv_nsec -= 1000000000;
-			ts->tv_sec += 1;
-		}
-		
-		/* Recalculate delta after offset */
-		delta_ns = (ts->tv_sec - now_sec) * 1000000000L + (ts->tv_nsec - now_nsec);
-		TRACE(TLVL_DEBUG+1,"(drvdata,%d,%lld.%09ld) AFTER +200us now=%ld.%09u delta_ns=%'ld",
-		      ch, ts->tv_sec, ts->tv_nsec, now_sec, now_nsec, delta_ns);
-	} else {
-		TRACE(TLVL_DEBUG+1,"(drvdata,%d,%lld.%09ld) START now=%ld.%09u delta_ns=%'ld",
-		      ch, ts->tv_sec, ts->tv_nsec, now_sec, now_nsec, delta_ns);
-	}
 
 	map = regmap + ch;
 
+	set_normalized_timespec64(ts, ts->tv_sec, ts->tv_nsec + channel_pulse_offsets[ch]);
+
 	wrn_ts_sub(ts, 8); /* 1 cycle, to account for output latencies */
 	writel(ts->tv_nsec / 8, base + map->cycle);
-	TRACE(TLVL_DEBUG+2,"ch=%d cycle_reg=%ld (ns=%ld)", ch, ts->tv_nsec/8, ts->tv_nsec);
 	writel(GET_HI32(ts->tv_sec), base + map->trig_h);
 	writel(ts->tv_sec, base + map->trig_l);
-	TRACE(TLVL_DEBUG+3,"ch=%d trig_h=%llu trig_l=%u", ch, GET_HI32(ts->tv_sec), (uint32_t)ts->tv_sec);
 
 	/* Normal single-channel LATCH */
 	writel(1 << ch, &dio->R_LATCH);
-	TRACE(TLVL_DEBUG+4,"ch=%d LATCH 0x%x", ch, 1 << ch);
-	
-	TRACE(TLVL_DEBUG+5,"ch=%d LATCH done delta_ns=%ld", ch, delta_ns);
+
+    /* Read current WR time for diagnostics */
+    h1 = readl(&ppsg->CNTR_UTCHI);
+    low = readl(&ppsg->CNTR_UTCLO);
+    h2 = readl(&ppsg->CNTR_UTCHI);
+    if (h2 != h1)
+            low = readl(&ppsg->CNTR_UTCLO);
+    now_ticks = readl(&ppsg->CNTR_NSEC); // not really nanoseconds, but ticks of 8ns
+    /* Check for ns rollover: if seconds changed, re-read */
+    {
+            uint32_t low2 = readl(&ppsg->CNTR_UTCLO);
+            if (low2 != low) {
+                    low = low2;
+                    h2 = readl(&ppsg->CNTR_UTCHI);
+                    now_ticks = readl(&ppsg->CNTR_NSEC);
+            }
+    }
+    now_sec = low;
+    SET_HI32(now_sec, h2);
+    now_ns = now_ticks * 8;  /* convert ticks to nanoseconds */
+
+    /* Calculate delta: scheduled - current (in ns, approximate) */
+    delta_ns = (ts->tv_sec - now_sec) * 1000000000L + (ts->tv_nsec - now_ns);
+
+	TRACE(TLVL_DEBUG+5,"DONE ch=%d delta_ns: %8ld with pulse_offset: %7d ts=%lld.%09ld"
+		, ch, delta_ns, channel_pulse_offsets[ch], ts->tv_sec, ts->tv_nsec);
 }	// __wrn_new_pulse(struct wrn_drvdata *drvdata, int ch, struct TIMESPEC *ts)
 
 static int wrn_dio_cmd_pulse(struct wrn_drvdata *drvdata,

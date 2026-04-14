@@ -464,7 +464,7 @@ int main(int argc, char **argv)
 
 	memset(&ifr, 0, sizeof(ifr));
 	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	TRACE(TLVL_LOG,
+	TRACE(TLVL_DEBUG+1,
 	      TSPRINTF("%s %s %s: in main: Ron - before ioctl PRIV_MEZZANINE_ID"
 		           , prgname, ifname, argv[0]) );
 	if (ioctl(sock, PRIV_MEZZANINE_ID, &ifr) < 0
