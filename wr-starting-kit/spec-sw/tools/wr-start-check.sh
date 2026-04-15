@@ -1,5 +1,5 @@
 #!/bin/bash
-: << SPECIFICATION
+: << 'SPECIFICATION'
 wr_start_check.sh [--sender|--receiver]
 
 Check and error out if any are not true:
@@ -231,7 +231,9 @@ assign_irq_affinity() {
     [[ $found -eq 1 ]] || die "Could not find wr-nic/spec IRQ to assign"
 }
 
+echo "before assigning IRQ affinity:"
 assign_irq_affinity
+echo "after assigning IRQ affinity:"
 
 # ============================================================================
 # Disable C-states on isolated CPU
@@ -299,6 +301,13 @@ start_agent() {
     fi
 }
 
+environ () 
+{
+    pid=$1;
+    ( cat /proc/${pid}/environ;
+    echo ) | tr '\000' '\n'
+}
+
 case $MODE in
     sender)
         info "Configuring sender node"
@@ -308,7 +317,19 @@ case $MODE in
     receiver)
         info "Configuring receiver node"
         start_agent
-        ;;
+        if [ -f /proc/trace/buffer ]; then
+            # for using trace
+            PATH=~icarus/wr-starting-kit-clk06-AL9-ron/standard_v2.0/trace/build/bin:$PATH
+            . trace_functions.sh
+            export TRACE_FILE=/proc/trace/buffer
+            toffMg 9-63 # I just want the following 2 on for the latency measurement
+            tonM -n wr-nic-dio DEBUG+5
+            tonM -n nic-core   DEBUG+40
+            echo 'Getting average latency for wr-nic-dio (over 5 seconds; should be about 160)...'
+            treset||true;sleep 5;tshow|grep -A1 ' ch=[14] '|tdelta -ct 1 -d 1 -stats -post /START/ |tail| grep 'ave'
+            toffMg 9-63 # turn off again
+        fi
+
 esac
 
 # ============================================================================
