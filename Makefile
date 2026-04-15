@@ -28,7 +28,8 @@ default:
 		wr-starting-kit/spec-sw/tools/wr-dio-agent  \
 		wr-starting-kit/spec-sw/tools/wr-dio-cmd    \
 		wr-starting-kit/spec-sw/tools/wr-dio-pps    \
-		wr-starting-kit/spec-sw/tools/wr-dio-ruler  
+		wr-starting-kit/spec-sw/tools/wr-dio-ruler  \
+		wr-starting-kit/spec-sw/tools/wr-start-check.sh  
 
 RPM_STATUS := $(shell rpm -q spec)
 ifeq ($(RPM_STATUS),package spec is not installed)
