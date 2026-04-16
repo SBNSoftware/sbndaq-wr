@@ -92,7 +92,7 @@ ln -sf /lib/modules/%{_kernel_release}/extra/spec.ko               /lib/modules/
 ln -sf /lib/modules/%{_kernel_release}/extra/wr-nic.ko             /lib/modules/%{_kernel_release}/weak-updates/
 
 ## Enable and reload systemd unit
-#%systemd_post spec.service
+%systemd_post spec.service
 
 # Setuid on tools
 chmod +s /usr/bin/spec-cl

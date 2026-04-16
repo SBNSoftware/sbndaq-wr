@@ -327,7 +327,7 @@ static int wrn_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 static int dummy_ioctlpriv(struct net_device *dev, struct ifreq *ifr, void*, int cmd)
 {
-    pr_info(">>> dummy_ioctlpriv(dev=%s) called: cmd = 0x%x\n", dev->name, cmd);
+    TRACE_DBG(1,">>> dummy_ioctlpriv(...) called: cmd = 0x%x; will call wrn_ioctl\n", cmd);
     return  wrn_ioctl(dev, ifr, cmd);
 }
 

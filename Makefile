@@ -39,12 +39,25 @@ else
 endif
 
 install:
+	@# Save the enabled state before uninstalling
+	@if systemctl is-enabled spec.service >/dev/null 2>&1; then \
+		echo "spec.service was enabled - will re-enable after install"; \
+		touch .spec_was_enabled; \
+	else \
+		rm -f .spec_was_enabled; \
+	fi
 	$(UNINSTALL_CMD)
 	mkdir -p $(HOME)/rpmbuild/SOURCES
 	cp spec.tar $(HOME)/rpmbuild/SOURCES/.
 	rpmbuild -bb spec.spec
 	ls $(HOME)/rpmbuild/RPMS/`uname -i`
 	ksu root -e /bin/rpm -i $(HOME)/rpmbuild/RPMS/`uname -i`/spec-$(SPEC_VERSION)-$(SPEC_RELEASE).`uname -i`.rpm
+	@# Restore the enabled state if it was enabled before
+	@if [ -f .spec_was_enabled ]; then \
+		echo "Re-enabling spec.service"; \
+		ksu root -e /usr/bin/systemctl enable spec.service; \
+		rm -f .spec_was_enabled; \
+	fi
 
 uninstall:
 	$(UNINSTALL_CMD)
