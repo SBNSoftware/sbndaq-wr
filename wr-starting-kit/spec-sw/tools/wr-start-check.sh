@@ -122,7 +122,11 @@ install_modules() {
     done
     
     fix_msg "Starting spec service"
-    systemctl start spec
+    #systemctl start spec
+    /sbin/modprobe spec
+    /usr/bin/sleep 1
+    /sbin/modprobe wr_nic
+    /sbin/ip link set $WR_INTERFACE up
     
     # Wait for interface to come up
     local tries=10
