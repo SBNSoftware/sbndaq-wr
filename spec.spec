@@ -75,6 +75,7 @@ install -m 644 etc/spec.service  $RPM_BUILD_ROOT/usr/lib/systemd/system/
 /usr/bin/wr-dio-pps
 /usr/bin/wr-dio-ruler
 /usr/bin/wr-start-check.sh
+/usr/bin/wr-stop.sh
 /usr/lib/firmware/fmc/spec-init.bin
 /usr/lib/firmware/fmc/spec_sbnd.bin
 /usr/lib/firmware/fmc/wr_nic_dio.bin

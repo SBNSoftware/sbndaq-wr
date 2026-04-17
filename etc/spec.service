@@ -1,8 +1,7 @@
 [Unit]
 Description=Load SPEC and WR-NIC kernel modules and bring up wr0 interface
-After=network-pre.target
-Requires=irqbalance.service
-Wants=network-pre.target
+After=network-pre.target irqbalance.service
+Wants=network-pre.target irqbalance.service
 
 [Service]
 Type=oneshot
