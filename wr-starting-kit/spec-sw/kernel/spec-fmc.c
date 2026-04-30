@@ -111,6 +111,7 @@ static int spec_irq_request(struct fmc_device *fmc, irq_handler_t handler,
 		TRACE(TLVL_ERROR,"DONE - ERROR");
 		return ret;
 	}
+	spec->irq_registered = 1;
 
 	if (spec_use_msi) {
 		/* A check and a hack, but doesn't work on all computers */
@@ -145,6 +146,7 @@ static int spec_irq_free(struct fmc_device *fmc)
 
 	gennum_writel(spec, 0xffff, GNGPIO_INT_MASK_SET); /* disable */
 	free_irq(fmc->irq, fmc);
+	spec->irq_registered = 0;
 	return 0;
 }
 
@@ -466,6 +468,19 @@ void spec_fmc_destroy(struct spec_dev *spec)
 	fmc_device_unregister(spec->fmc);
 	spec_irq_exit(spec->fmc);
 	spec_i2c_exit(spec->fmc);
+	/*
+	 * If the FMC driver (wr_nic) didn't properly free the IRQ before
+	 * being unloaded, we must free it here to avoid the kernel warning:
+	 * "remove_proc_entry: removing non-empty directory 'irq/X'"
+	 * This happens because pci_disable_device() tries to unmap the IRQ
+	 * while the handler is still registered.
+	 */
+	if (spec->irq_registered) {
+		dev_warn(&spec->pdev->dev,
+			 "IRQ still registered, cleaning up\n");
+		free_irq(spec->fmc->irq, spec->fmc);
+		spec->irq_registered = 0;
+	}
 	put_device(&spec->fmc->dev);
 	spec->fmc = NULL;
 }
