@@ -1,6 +1,6 @@
 #!/bin/bash
 : << 'SPECIFICATION'
-wr_start_check.sh [--sender|--receiver]
+wr_start_check.sh [--sender|--receiver] [--agent]
 
 Check and error out if any are not true:
 The script must be run as root.
@@ -44,9 +44,11 @@ scheduling policy.
 One of them should have arguments: wr0 IN1 R1+0.034697225
                     and the other: wr0 IN4 R4+0.000331005
  
-For the receiving node, there should be one instance of the command
-wr-dio-agent running and this should have the argument: wr0
+For the receiving node, if the --agent option is given, there should be one
+instance of the command wr-dio-agent running and this should have the
+argument: wr0
 It should be pinned to the isolated CPU with a real-time scheduling policy.
+If --agent is not given, wr-dio-agent is not started.
 
 SPECIFICATION
 
@@ -157,6 +159,7 @@ fi
 # Determine node role: sender or receiver
 # ============================================================================
 MODE=""
+START_AGENT=0
 SHORT_HOST=$(hostname -s)
 
 while [[ $# -gt 0 ]]; do
@@ -169,6 +172,10 @@ while [[ $# -gt 0 ]]; do
         --receiver)
             [[ -z $MODE ]] || die "Cannot specify both --sender and --receiver"
             MODE="receiver"
+            shift
+            ;;
+        --agent)
+            START_AGENT=1
             shift
             ;;
         *)
@@ -315,13 +322,21 @@ environ ()
 case $MODE in
     sender)
         info "Configuring sender node"
+        info "Setting DIO channels 1 and 4 to Input mode"
+        for ch in 1 4; do wr-dio-cmd $WR_INTERFACE mode $ch I; done
         start_ruler "IN1" "$IN1_OFFSET"
         start_ruler "IN4" "$IN4_OFFSET"
         ;;
     receiver)
         info "Configuring receiver node"
-        start_agent
-        info "Checking agent start- pidof wr-dio-agent: $(pgrep -f 'wr-dio-agent')"
+        info "Setting DIO channels 1 and 4 to DAC mode"
+        for ch in 1 2 3 4; do wr-dio-cmd $WR_INTERFACE mode $ch D; done
+        if [[ $START_AGENT -eq 1 ]]; then
+            start_agent
+            info "Checking agent start- pidof wr-dio-agent: $(pgrep -f 'wr-dio-agent')"
+        else
+            info "Skipping wr-dio-agent (use --agent to start it)"
+        fi
         if [ -f ~icarus/wr-starting-kit-clk06-AL9-ron/standard_v2.0/trace/build/bin -a -f /proc/trace/buffer ]; then
             # for using trace
             PATH=~icarus/wr-starting-kit-clk06-AL9-ron/standard_v2.0/trace/build/bin:$PATH
