@@ -26,6 +26,7 @@
 # include "TRACE/trace.h"
 #else
 # define TRACE(...)
+# define TRACE_DBG(...)
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
