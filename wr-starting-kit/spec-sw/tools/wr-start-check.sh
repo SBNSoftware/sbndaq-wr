@@ -265,9 +265,10 @@ disable_cstates
 start_ruler() {
     local input=$1
     local offset=$2
+    local offset_ERE=`echo "$2"|sed 's/+/\\+/;s/\./\\.'` # Extended RE
     
     # Check if already running with correct args
-    if pgrep -f "wr-dio-ruler $WR_INTERFACE $input $offset" >/dev/null; then
+    if pgrep -f "wr-dio-ruler $WR_INTERFACE $input $offset_ERE" >/dev/null; then
         info "wr-dio-ruler for $input already running"
         return 0
     fi
@@ -280,7 +281,7 @@ start_ruler() {
     disown
     sleep 0.5
     
-    if ! pgrep -f "wr-dio-ruler $WR_INTERFACE $input $offset" >/dev/null; then
+    if ! pgrep -f "wr-dio-ruler $WR_INTERFACE $input $offset_ERE" >/dev/null; then
         die "Failed to start wr-dio-ruler for $input"
     fi
 }
@@ -318,7 +319,6 @@ case $MODE in
         info "Setting DIO channels 1 and 4 to Input mode"
         for ch in 1 4; do wr-dio-cmd $WR_INTERFACE mode $ch I; done
         start_ruler "IN1" "$IN1_OFFSET"
-        sleep 2 # First attempted reboot using this script only resulted in the above ruler running.
         start_ruler "IN4" "$IN4_OFFSET"
         ;;
     receiver)
