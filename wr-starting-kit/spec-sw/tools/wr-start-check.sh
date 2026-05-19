@@ -56,8 +56,8 @@ set -e
 # Configuration
 # ============================================================================
 RT_PRIORITY=80
-IN1_OFFSET="R1+0.034697225"
-IN4_OFFSET="R4+0.000331005"
+IN1_OFFSET="L3+0.001 R1+0.034697225"
+IN4_OFFSET="L2+0.001 R4+0.000331005"
 WR_INTERFACE="wr0"
 
 # ============================================================================
@@ -318,6 +318,7 @@ case $MODE in
         info "Configuring sender node"
         info "Setting DIO channels 1 and 4 to Input mode"
         for ch in 1 4; do wr-dio-cmd $WR_INTERFACE mode $ch I; done
+        for ch in 2 3; do wr-dio-cmd $WR_INTERFACE mode $ch D; done
         start_ruler "IN1" "$IN1_OFFSET"
         start_ruler "IN4" "$IN4_OFFSET"
         ;;
