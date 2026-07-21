@@ -228,7 +228,7 @@ extern int fmc_device_register_n(struct fmc_device **devs, int n);
 extern void fmc_device_unregister_n(struct fmc_device **devs, int n);
 
 /* Internal cross-calls between files; not exported to other modules */
-extern int fmc_match(struct device *dev, struct device_driver *drv);
+extern int fmc_match(struct device *dev, const struct device_driver *drv);
 extern int fmc_fill_id_info(struct fmc_device *fmc);
 extern void fmc_free_id_info(struct fmc_device *fmc);
 extern void fmc_dump_eeprom(const struct fmc_device *fmc);

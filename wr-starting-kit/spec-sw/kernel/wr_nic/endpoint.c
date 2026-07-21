@@ -138,15 +138,15 @@ static void wrn_update_link_status(struct net_device *dev)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
 static void wrn_ep_check_link(struct timer_list *tl)
 {
-	struct wrn_ep *ep = from_timer(ep, tl, ep_link_timer);
-    struct net_device *dev = ep->dev;  // Assuming a pointer to net_device is stored in ep
-    unsigned long flags;
+	struct wrn_ep *ep = container_of(tl, struct wrn_ep, ep_link_timer);
+	struct net_device *dev = ep->dev;
+	unsigned long flags;
 
-    spin_lock_irqsave(&ep->lock, flags);
-    wrn_update_link_status(dev);
-    spin_unlock_irqrestore(&ep->lock, flags);
+	spin_lock_irqsave(&ep->lock, flags);
+	wrn_update_link_status(dev);
+	spin_unlock_irqrestore(&ep->lock, flags);
 
-    mod_timer(&ep->ep_link_timer, jiffies + WRN_LINK_POLL_INTERVAL);
+	mod_timer(&ep->ep_link_timer, jiffies + WRN_LINK_POLL_INTERVAL);
 }
 #else
 static void wrn_ep_check_link(unsigned long dev_id)
@@ -167,7 +167,6 @@ static void wrn_ep_check_link(unsigned long dev_id)
 int wrn_ep_open(struct net_device *dev)
 {
 	struct wrn_ep *ep = netdev_priv(dev);
-	unsigned long timerarg = (unsigned long)dev;
 
 	if (1) {
 		netif_carrier_on(dev);
@@ -198,9 +197,11 @@ int wrn_ep_open(struct net_device *dev)
 	wrn_phy_write(dev, 0, MII_BMCR, BMCR_ANENABLE | BMCR_ANRESTART);
 
 	/* Prepare the timer for link-up notifications */
+	ep->dev = dev;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
-	timer_setup(&ep->ep_link_timer, wrn_ep_check_link, timerarg);
+	timer_setup(&ep->ep_link_timer, wrn_ep_check_link, 0);
 #else
+	unsigned long timerarg = (unsigned long)dev;
 	setup_timer(&ep->ep_link_timer, wrn_ep_check_link, timerarg);
 #endif
 	if (0) {

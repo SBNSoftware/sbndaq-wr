@@ -30,10 +30,10 @@
 
 #include <inttypes.h>
 
-#define EB_VERSION_FULL "47a7abf876a400b239c0d7f48791b0737cc70ffa"
-#define EB_DATE_FULL    "2026-05-13 10:16:09 -0500"
+#define EB_VERSION_FULL "a1868cc5bbd16e38566cbc6ca0ecc543e8ed0fcc"
+#define EB_DATE_FULL    "2026-05-13 15:16:01 -0500"
 
-#define EB_VERSION_SHORT (uint32_t)UINT32_C(0x47a7abf8)
+#define EB_VERSION_SHORT (uint32_t)UINT32_C(0xa1868cc5)
 #define EB_DATE_SHORT    (uint32_t)UINT32_C(0x20260513)
 
 #endif
