@@ -316,8 +316,9 @@ environ ()
 case $MODE in
     sender)
         info "Configuring sender node"
-        info "Setting DIO channels 1 and 4 to Input mode"
+        info "Setting DIO channels 1 and 4 to Input mode; 2 and 3 to Output mode"
         for ch in 1 4; do wr-dio-cmd $WR_INTERFACE mode $ch I; done
+        for ch in 2 3; do wr-dio-cmd $WR_INTERFACE mode $ch D; done
         start_ruler "IN1" "$IN1_OFFSET"
         start_ruler "IN4" "$IN4_OFFSET"
         ;;
