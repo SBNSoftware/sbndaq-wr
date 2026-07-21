@@ -265,7 +265,7 @@ disable_cstates
 start_ruler() {
     local input=$1
     local offset=$2
-    local offset_ERE=`echo "$2"|sed 's/+/\\\\+/;s/\./\\\\./'` # Extended RE
+    local offset_ERE=`echo "$2"|sed 's/+/\\\\+/g;s/\./\\\\./g'` # Extended RE
     
     # Check if already running with correct args
     if pgrep -f "wr-dio-ruler $WR_INTERFACE $input $offset_ERE" >/dev/null; then
