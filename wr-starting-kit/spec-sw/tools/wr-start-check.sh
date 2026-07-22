@@ -58,6 +58,8 @@ set -e
 RT_PRIORITY=80
 IN1_OFFSET="L3+0.001 R1+0.034697225"
 IN4_OFFSET="L2+0.001 R4+0.000331005"
+SENDER12='IN1=L3+0.001,R1+0.034697225:IN4=L2+0.001,R4+0.000331005'
+SENDER60='IN1=L2+0.001,R2+0.570797:IN4=L3+0.001 R3+0.0017835'
 WR_INTERFACE="wr0"
 
 # ============================================================================
@@ -157,6 +159,7 @@ fi
 # Determine node role: sender or receiver
 # ============================================================================
 MODE=""
+SENDER_CFG=""
 SHORT_HOST=$(hostname -s)
 
 while [[ $# -gt 0 ]]; do
@@ -165,6 +168,26 @@ while [[ $# -gt 0 ]]; do
             [[ -z $MODE ]] || die "Cannot specify both --sender and --receiver"
             MODE="sender"
             shift
+            # Optional sender channel config can follow as non-option tokens.
+            if [[ $# -gt 0 && $1 != --* ]]; then
+                SENDER_CFG="$1"
+                shift
+                while [[ $# -gt 0 && $1 != --* ]]; do
+                    SENDER_CFG+=" $1"
+                    shift
+                done
+            fi
+            ;;
+        --sender=*)
+            [[ -z $MODE ]] || die "Cannot specify both --sender and --receiver"
+            MODE="sender"
+            SENDER_CFG="${1#--sender=}"
+            shift
+            # Allow unquoted config fragments split by shell whitespace.
+            while [[ $# -gt 0 && $1 != --* ]]; do
+                SENDER_CFG+=" $1"
+                shift
+            done
             ;;
         --receiver)
             [[ -z $MODE ]] || die "Cannot specify both --sender and --receiver"
@@ -179,9 +202,15 @@ done
 
 if [[ -z $MODE ]]; then
     case $SHORT_HOST in
+        sbn-mi60-wr01)
+            MODE="sender"
+            info "Detected sender node (sbn-mi60-wr01)"
+            SENDER_CFG=$SENDER60
+            ;;
         icarus-clk04)
             MODE="sender"
             info "Detected sender node (icarus-clk04)"
+            SENDER_CFG=$SENDER12
             ;;
         icarus-clk06)
             MODE="receiver"
@@ -193,6 +222,25 @@ if [[ -z $MODE ]]; then
     esac
 else
     info "Mode set via command line: $MODE"
+    if [[ $MODE == "sender" ]]; then
+        if [[ -z $SENDER_CFG ]]; then
+            case $SHORT_HOST in
+                sbn-mi60-wr01)
+                    SENDER_CFG=$SENDER60
+                    info "Using default sender config for $SHORT_HOST"
+                    ;;
+                icarus-clk04)
+                    SENDER_CFG=$SENDER12
+                    info "Using default sender config for $SHORT_HOST"
+                    ;;
+                *)
+                    die "Sender mode selected with no sender config. Provide one via --sender <cfg> or --sender=<cfg>."
+                    ;;
+            esac
+        else
+            info "Using sender config from command line: $SENDER_CFG"
+        fi
+    fi
 fi
 
 # ============================================================================
@@ -319,8 +367,12 @@ case $MODE in
         info "Setting DIO channels 1 and 4 to Input mode; 2 and 3 to Output mode"
         for ch in 1 4; do wr-dio-cmd $WR_INTERFACE mode $ch I; done
         for ch in 2 3; do wr-dio-cmd $WR_INTERFACE mode $ch D; done
-        start_ruler "IN1" "$IN1_OFFSET"
-        start_ruler "IN4" "$IN4_OFFSET"
+        for chanspec in ${SENDER_CFG//:/ };do
+            IFS== read -ra chanval <<< $chanspec
+            start_ruler ${chanval[0]} ${chanval[1]//,/ }
+        done
+        #start_ruler "IN1" "$IN1_OFFSET"
+        #start_ruler "IN4" "$IN4_OFFSET"
         ;;
     receiver)
         info "Configuring receiver node"
