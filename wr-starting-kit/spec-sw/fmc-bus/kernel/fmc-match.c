@@ -19,7 +19,7 @@ void *fru_alloc(size_t size)
 }
 
 /* The actual match function */
-int fmc_match(struct device *dev, struct device_driver *drv)
+int fmc_match(struct device *dev, const struct device_driver *drv)
 {
 	struct fmc_driver *fdrv = to_fmc_driver(drv);
 	struct fmc_device *fdev = to_fmc_device(dev);
