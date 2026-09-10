@@ -204,17 +204,17 @@ if [[ -z $MODE ]]; then
     case $SHORT_HOST in
         sbn-mi60-wr01)
             MODE="sender"
-            info "Detected sender node (sbn-mi60-wr01)"
+            info "Detected sender node ($SHORT_HOST)"
             SENDER_CFG=$SENDER60
             ;;
-        icarus-clk04)
+        icarus-clk04|sbn-mi12-wr01)
             MODE="sender"
-            info "Detected sender node (icarus-clk04)"
+            info "Detected sender node ($SHORT_HOST)"
             SENDER_CFG=$SENDER12
             ;;
-        icarus-clk06)
+        icarus-clk06|icarus-clk07)
             MODE="receiver"
-            info "Detected receiver node (icarus-clk06)"
+            info "Detected receiver node ($SHORT_HOST)"
             ;;
         *)
             die "Unknown host '$SHORT_HOST'. Use --sender or --receiver to specify role."
@@ -229,7 +229,7 @@ else
                     SENDER_CFG=$SENDER60
                     info "Using default sender config for $SHORT_HOST"
                     ;;
-                icarus-clk04)
+                icarus-clk04|sbn-mi12-wr01)
                     SENDER_CFG=$SENDER12
                     info "Using default sender config for $SHORT_HOST"
                     ;;
